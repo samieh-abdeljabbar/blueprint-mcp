@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.blueprint.db
+.venv/
+*.egg-info/
+dist/
+.pytest_cache/
+viewer/node_modules/
+viewer/dist/

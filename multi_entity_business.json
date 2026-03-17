@@ -1,0 +1,259 @@
+{
+    "name": "multi_entity_business",
+    "display_name": "Multi-Entity Business Platform",
+    "description": "Multi-location business management platform with separate entities, POS integration, payroll, compliance tracking, and centralized reporting. Designed for operations like gas stations, convenience stores, restaurants with 50+ entities under a parent company.",
+    "nodes": [
+        {
+            "ref": "system",
+            "name": "{{project_name}}",
+            "type": "system",
+            "description": "Root system — multi-entity business management platform"
+        },
+        {
+            "ref": "api_service",
+            "name": "API Service",
+            "type": "service",
+            "parent_ref": "system",
+            "description": "Central FastAPI backend serving all business operations",
+            "metadata": { "framework": "fastapi", "port": 8000 }
+        },
+        {
+            "ref": "database",
+            "name": "Primary Database",
+            "type": "database",
+            "parent_ref": "system",
+            "description": "PostgreSQL database for all business data",
+            "metadata": { "engine": "postgresql" }
+        },
+        {
+            "ref": "frontend",
+            "name": "Dashboard Frontend",
+            "type": "service",
+            "parent_ref": "system",
+            "description": "React management dashboard",
+            "metadata": { "framework": "react", "port": 3000 }
+        },
+        {
+            "ref": "companies_table",
+            "name": "companies",
+            "type": "table",
+            "parent_ref": "database",
+            "description": "Parent companies and business entities",
+            "metadata": {
+                "columns": [
+                    { "name": "id", "type": "UUID", "primary_key": true },
+                    { "name": "name", "type": "VARCHAR(255)" },
+                    { "name": "entity_type", "type": "VARCHAR(50)", "note": "llc, corp, dba" },
+                    { "name": "ein", "type": "VARCHAR(20)" },
+                    { "name": "parent_company_id", "type": "UUID", "foreign_key": "companies.id" },
+                    { "name": "status", "type": "VARCHAR(20)" },
+                    { "name": "created_at", "type": "TIMESTAMP" }
+                ]
+            }
+        },
+        {
+            "ref": "stores_table",
+            "name": "stores",
+            "type": "table",
+            "parent_ref": "database",
+            "description": "Physical store locations",
+            "metadata": {
+                "columns": [
+                    { "name": "id", "type": "UUID", "primary_key": true },
+                    { "name": "company_id", "type": "UUID", "foreign_key": "companies.id" },
+                    { "name": "name", "type": "VARCHAR(255)" },
+                    { "name": "address", "type": "TEXT" },
+                    { "name": "store_type", "type": "VARCHAR(50)", "note": "gas_station, convenience, restaurant" },
+                    { "name": "brand", "type": "VARCHAR(50)", "note": "phillips66, shell, etc" },
+                    { "name": "status", "type": "VARCHAR(20)" }
+                ]
+            }
+        },
+        {
+            "ref": "employees_table",
+            "name": "employees",
+            "type": "table",
+            "parent_ref": "database",
+            "description": "Employee records across all entities",
+            "metadata": {
+                "columns": [
+                    { "name": "id", "type": "UUID", "primary_key": true },
+                    { "name": "company_id", "type": "UUID", "foreign_key": "companies.id" },
+                    { "name": "store_id", "type": "UUID", "foreign_key": "stores.id" },
+                    { "name": "name", "type": "VARCHAR(255)" },
+                    { "name": "role", "type": "VARCHAR(100)" },
+                    { "name": "pay_rate", "type": "DECIMAL(10,2)" },
+                    { "name": "hire_date", "type": "DATE" },
+                    { "name": "status", "type": "VARCHAR(20)" }
+                ]
+            }
+        },
+        {
+            "ref": "sales_table",
+            "name": "daily_sales",
+            "type": "table",
+            "parent_ref": "database",
+            "description": "Daily sales totals per store",
+            "metadata": {
+                "columns": [
+                    { "name": "id", "type": "UUID", "primary_key": true },
+                    { "name": "store_id", "type": "UUID", "foreign_key": "stores.id" },
+                    { "name": "date", "type": "DATE" },
+                    { "name": "total_sales", "type": "DECIMAL(12,2)" },
+                    { "name": "fuel_sales", "type": "DECIMAL(12,2)" },
+                    { "name": "inside_sales", "type": "DECIMAL(12,2)" },
+                    { "name": "lottery_sales", "type": "DECIMAL(12,2)" }
+                ]
+            }
+        },
+        {
+            "ref": "fuel_table",
+            "name": "fuel_inventory",
+            "type": "table",
+            "parent_ref": "database",
+            "description": "Fuel tank levels and deliveries",
+            "metadata": {
+                "columns": [
+                    { "name": "id", "type": "UUID", "primary_key": true },
+                    { "name": "store_id", "type": "UUID", "foreign_key": "stores.id" },
+                    { "name": "tank_id", "type": "VARCHAR(20)" },
+                    { "name": "fuel_type", "type": "VARCHAR(20)" },
+                    { "name": "current_gallons", "type": "DECIMAL(10,2)" },
+                    { "name": "capacity", "type": "DECIMAL(10,2)" },
+                    { "name": "last_delivery", "type": "TIMESTAMP" }
+                ]
+            }
+        },
+        {
+            "ref": "atm_table",
+            "name": "atm_machines",
+            "type": "table",
+            "parent_ref": "database",
+            "description": "ATM units and cash levels",
+            "metadata": {
+                "columns": [
+                    { "name": "id", "type": "UUID", "primary_key": true },
+                    { "name": "store_id", "type": "UUID", "foreign_key": "stores.id" },
+                    { "name": "terminal_id", "type": "VARCHAR(50)" },
+                    { "name": "cash_balance", "type": "DECIMAL(10,2)" },
+                    { "name": "status", "type": "VARCHAR(20)" },
+                    { "name": "last_replenish", "type": "TIMESTAMP" }
+                ]
+            }
+        },
+        {
+            "ref": "compliance_table",
+            "name": "compliance_records",
+            "type": "table",
+            "parent_ref": "database",
+            "description": "Licenses, permits, inspections, tax filings",
+            "metadata": {
+                "columns": [
+                    { "name": "id", "type": "UUID", "primary_key": true },
+                    { "name": "company_id", "type": "UUID", "foreign_key": "companies.id" },
+                    { "name": "store_id", "type": "UUID", "foreign_key": "stores.id" },
+                    { "name": "type", "type": "VARCHAR(50)", "note": "license, permit, inspection, tax_filing" },
+                    { "name": "name", "type": "VARCHAR(255)" },
+                    { "name": "expiration_date", "type": "DATE" },
+                    { "name": "status", "type": "VARCHAR(20)" }
+                ]
+            }
+        },
+        {
+            "ref": "payroll_module",
+            "name": "Payroll",
+            "type": "module",
+            "parent_ref": "api_service",
+            "description": "Payroll processing, timesheet collection, pay stub generation"
+        },
+        {
+            "ref": "entity_mgmt_module",
+            "name": "Entity Management",
+            "type": "module",
+            "parent_ref": "api_service",
+            "description": "CRUD for companies, stores, employee assignments"
+        },
+        {
+            "ref": "sales_module",
+            "name": "Sales & Reporting",
+            "type": "module",
+            "parent_ref": "api_service",
+            "description": "Daily sales entry, reporting, dashboards"
+        },
+        {
+            "ref": "compliance_module",
+            "name": "Compliance Tracker",
+            "type": "module",
+            "parent_ref": "api_service",
+            "description": "License tracking, renewal alerts, inspection scheduling"
+        },
+        {
+            "ref": "atm_module",
+            "name": "ATM Management",
+            "type": "module",
+            "parent_ref": "api_service",
+            "description": "ATM cash levels, replenishment alerts, transaction monitoring"
+        },
+        {
+            "ref": "fuel_module",
+            "name": "Fuel Management",
+            "type": "module",
+            "parent_ref": "api_service",
+            "description": "Tank monitoring, delivery scheduling, price management"
+        },
+        {
+            "ref": "pos_integration",
+            "name": "POS Integration",
+            "type": "external",
+            "parent_ref": "system",
+            "description": "Verifone/Ruby POS system integration for sales data"
+        },
+        {
+            "ref": "banking_integration",
+            "name": "Banking Integration",
+            "type": "external",
+            "parent_ref": "system",
+            "description": "Bank CSV import, deposit slip management, transaction categorization"
+        },
+        {
+            "ref": "notification_service",
+            "name": "Notifications",
+            "type": "service",
+            "parent_ref": "system",
+            "description": "Email/SMS alerts for compliance deadlines, low ATM cash, fuel levels"
+        },
+        {
+            "ref": "auth",
+            "name": "Authentication",
+            "type": "module",
+            "parent_ref": "api_service",
+            "description": "JWT auth with role-based access (owner, manager, employee)"
+        },
+        {
+            "ref": "bi_dashboard",
+            "name": "BI Dashboard",
+            "type": "service",
+            "parent_ref": "system",
+            "description": "Chartbrew or custom dashboard for cross-entity analytics"
+        }
+    ],
+    "edges": [
+        { "source_ref": "frontend", "target_ref": "api_service", "relationship": "calls", "label": "REST API" },
+        { "source_ref": "bi_dashboard", "target_ref": "database", "relationship": "reads_from", "label": "Analytics queries" },
+        { "source_ref": "api_service", "target_ref": "database", "relationship": "connects_to", "label": "SQLAlchemy/asyncpg" },
+        { "source_ref": "entity_mgmt_module", "target_ref": "companies_table", "relationship": "reads_from", "label": "Company CRUD" },
+        { "source_ref": "entity_mgmt_module", "target_ref": "stores_table", "relationship": "reads_from", "label": "Store CRUD" },
+        { "source_ref": "entity_mgmt_module", "target_ref": "employees_table", "relationship": "reads_from", "label": "Employee CRUD" },
+        { "source_ref": "payroll_module", "target_ref": "employees_table", "relationship": "reads_from", "label": "Employee data" },
+        { "source_ref": "sales_module", "target_ref": "sales_table", "relationship": "writes_to", "label": "Daily sales entry" },
+        { "source_ref": "fuel_module", "target_ref": "fuel_table", "relationship": "reads_from", "label": "Tank levels" },
+        { "source_ref": "atm_module", "target_ref": "atm_table", "relationship": "reads_from", "label": "Cash balances" },
+        { "source_ref": "compliance_module", "target_ref": "compliance_table", "relationship": "reads_from", "label": "License tracking" },
+        { "source_ref": "compliance_module", "target_ref": "notification_service", "relationship": "calls", "label": "Expiration alerts" },
+        { "source_ref": "atm_module", "target_ref": "notification_service", "relationship": "calls", "label": "Low cash alerts" },
+        { "source_ref": "pos_integration", "target_ref": "sales_table", "relationship": "writes_to", "label": "POS data sync" },
+        { "source_ref": "banking_integration", "target_ref": "database", "relationship": "writes_to", "label": "Transaction import" },
+        { "source_ref": "auth", "target_ref": "employees_table", "relationship": "reads_from", "label": "User verification" },
+        { "source_ref": "fuel_module", "target_ref": "notification_service", "relationship": "calls", "label": "Low fuel alerts" }
+    ]
+}

@@ -1,0 +1,108 @@
+{
+    "name": "fullstack",
+    "display_name": "Full-Stack Web App",
+    "description": "Full-stack web application with frontend, API backend, database, authentication, and caching layer.",
+    "nodes": [
+        {
+            "ref": "system",
+            "name": "{{project_name}}",
+            "type": "system",
+            "description": "Root full-stack web application"
+        },
+        {
+            "ref": "frontend",
+            "name": "Frontend",
+            "type": "service",
+            "parent_ref": "system",
+            "description": "React/Vue/Svelte frontend SPA"
+        },
+        {
+            "ref": "api",
+            "name": "Backend API",
+            "type": "service",
+            "parent_ref": "system",
+            "description": "REST API backend server"
+        },
+        {
+            "ref": "database",
+            "name": "Database",
+            "type": "database",
+            "parent_ref": "system",
+            "description": "Primary relational database"
+        },
+        {
+            "ref": "cache",
+            "name": "Cache",
+            "type": "cache",
+            "parent_ref": "system",
+            "description": "Redis cache layer"
+        },
+        {
+            "ref": "auth",
+            "name": "Auth Module",
+            "type": "module",
+            "parent_ref": "api",
+            "description": "Authentication and session management"
+        },
+        {
+            "ref": "users_table",
+            "name": "users",
+            "type": "table",
+            "parent_ref": "database",
+            "description": "User accounts"
+        },
+        {
+            "ref": "sessions_table",
+            "name": "sessions",
+            "type": "table",
+            "parent_ref": "database",
+            "description": "User sessions"
+        },
+        {
+            "ref": "posts_table",
+            "name": "posts",
+            "type": "table",
+            "parent_ref": "database",
+            "description": "User-generated content"
+        },
+        {
+            "ref": "comments_table",
+            "name": "comments",
+            "type": "table",
+            "parent_ref": "database",
+            "description": "Comments on posts"
+        },
+        {
+            "ref": "media_table",
+            "name": "media",
+            "type": "table",
+            "parent_ref": "database",
+            "description": "Uploaded media files"
+        },
+        {
+            "ref": "storage",
+            "name": "File Storage",
+            "type": "external",
+            "parent_ref": "system",
+            "description": "S3-compatible object storage"
+        },
+        {
+            "ref": "cdn",
+            "name": "CDN",
+            "type": "external",
+            "parent_ref": "system",
+            "description": "Content delivery network for static assets"
+        }
+    ],
+    "edges": [
+        { "source_ref": "frontend", "target_ref": "api", "relationship": "calls", "label": "API requests" },
+        { "source_ref": "frontend", "target_ref": "cdn", "relationship": "reads_from", "label": "Static assets" },
+        { "source_ref": "api", "target_ref": "database", "relationship": "connects_to", "label": "ORM queries" },
+        { "source_ref": "api", "target_ref": "cache", "relationship": "reads_from", "label": "Cached data" },
+        { "source_ref": "auth", "target_ref": "users_table", "relationship": "reads_from", "label": "User auth" },
+        { "source_ref": "auth", "target_ref": "sessions_table", "relationship": "writes_to", "label": "Session mgmt" },
+        { "source_ref": "api", "target_ref": "posts_table", "relationship": "reads_from", "label": "Content CRUD" },
+        { "source_ref": "api", "target_ref": "storage", "relationship": "writes_to", "label": "File uploads" },
+        { "source_ref": "api", "target_ref": "media_table", "relationship": "writes_to", "label": "Media records" }
+    ]
+}

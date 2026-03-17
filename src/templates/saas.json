@@ -1,0 +1,100 @@
+{
+    "name": "saas",
+    "display_name": "SaaS Application",
+    "description": "Full SaaS application with authentication, billing, API, database, cache, queue, frontend, and email service.",
+    "nodes": [
+        {
+            "ref": "system",
+            "name": "{{project_name}}",
+            "type": "system",
+            "description": "Root SaaS application system"
+        },
+        {
+            "ref": "api",
+            "name": "API Server",
+            "type": "service",
+            "parent_ref": "system",
+            "description": "Main API server handling all business logic"
+        },
+        {
+            "ref": "database",
+            "name": "Primary Database",
+            "type": "database",
+            "parent_ref": "system",
+            "description": "PostgreSQL primary data store"
+        },
+        {
+            "ref": "cache",
+            "name": "Cache Layer",
+            "type": "cache",
+            "parent_ref": "system",
+            "description": "Redis cache for sessions and hot data"
+        },
+        {
+            "ref": "queue",
+            "name": "Job Queue",
+            "type": "queue",
+            "parent_ref": "system",
+            "description": "Background job processing queue"
+        },
+        {
+            "ref": "frontend",
+            "name": "Web Frontend",
+            "type": "service",
+            "parent_ref": "system",
+            "description": "React/Next.js frontend application"
+        },
+        {
+            "ref": "auth",
+            "name": "Auth Module",
+            "type": "module",
+            "parent_ref": "api",
+            "description": "Authentication and authorization (JWT, OAuth)"
+        },
+        {
+            "ref": "billing",
+            "name": "Billing Module",
+            "type": "module",
+            "parent_ref": "api",
+            "description": "Subscription management and payment processing"
+        },
+        {
+            "ref": "users_table",
+            "name": "users",
+            "type": "table",
+            "parent_ref": "database",
+            "description": "User accounts and profiles"
+        },
+        {
+            "ref": "subscriptions_table",
+            "name": "subscriptions",
+            "type": "table",
+            "parent_ref": "database",
+            "description": "Billing subscriptions and plans"
+        },
+        {
+            "ref": "email",
+            "name": "Email Service",
+            "type": "external",
+            "parent_ref": "system",
+            "description": "Transactional email delivery (SendGrid/SES)"
+        },
+        {
+            "ref": "stripe",
+            "name": "Stripe Integration",
+            "type": "external",
+            "parent_ref": "system",
+            "description": "Payment processing via Stripe"
+        }
+    ],
+    "edges": [
+        { "source_ref": "frontend", "target_ref": "api", "relationship": "calls", "label": "REST/GraphQL" },
+        { "source_ref": "api", "target_ref": "database", "relationship": "connects_to", "label": "ORM" },
+        { "source_ref": "api", "target_ref": "cache", "relationship": "reads_from", "label": "Session/cache reads" },
+        { "source_ref": "auth", "target_ref": "users_table", "relationship": "reads_from", "label": "User lookup" },
+        { "source_ref": "billing", "target_ref": "subscriptions_table", "relationship": "writes_to", "label": "Subscription mgmt" },
+        { "source_ref": "billing", "target_ref": "stripe", "relationship": "calls", "label": "Payment API" },
+        { "source_ref": "api", "target_ref": "queue", "relationship": "writes_to", "label": "Enqueue jobs" },
+        { "source_ref": "queue", "target_ref": "email", "relationship": "calls", "label": "Send emails" }
+    ]
+}

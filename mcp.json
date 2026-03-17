@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "blueprint": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["-m", "src.server"],
+      "env": {
+        "BLUEPRINT_DB": ".blueprint.db"
+      }
+    }
+  }
+}

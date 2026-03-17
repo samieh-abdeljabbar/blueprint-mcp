@@ -1,0 +1,77 @@
+{
+    "name": "api_service",
+    "display_name": "API Microservice",
+    "description": "Standalone API microservice with database, authentication, health check, and configuration management.",
+    "nodes": [
+        {
+            "ref": "system",
+            "name": "{{project_name}}",
+            "type": "system",
+            "description": "Root API microservice"
+        },
+        {
+            "ref": "api",
+            "name": "API Server",
+            "type": "api",
+            "parent_ref": "system",
+            "description": "RESTful API server"
+        },
+        {
+            "ref": "database",
+            "name": "Database",
+            "type": "database",
+            "parent_ref": "system",
+            "description": "PostgreSQL database"
+        },
+        {
+            "ref": "auth",
+            "name": "Auth Middleware",
+            "type": "module",
+            "parent_ref": "api",
+            "description": "JWT authentication middleware"
+        },
+        {
+            "ref": "health",
+            "name": "Health Check",
+            "type": "route",
+            "parent_ref": "api",
+            "description": "Health and readiness endpoints"
+        },
+        {
+            "ref": "config",
+            "name": "Config Manager",
+            "type": "config",
+            "parent_ref": "system",
+            "description": "Environment and secrets management"
+        },
+        {
+            "ref": "items_table",
+            "name": "items",
+            "type": "table",
+            "parent_ref": "database",
+            "description": "Primary resource table"
+        },
+        {
+            "ref": "users_table",
+            "name": "users",
+            "type": "table",
+            "parent_ref": "database",
+            "description": "API user accounts"
+        },
+        {
+            "ref": "audit_table",
+            "name": "audit_log",
+            "type": "table",
+            "parent_ref": "database",
+            "description": "API request audit trail"
+        }
+    ],
+    "edges": [
+        { "source_ref": "api", "target_ref": "database", "relationship": "connects_to", "label": "SQL queries" },
+        { "source_ref": "auth", "target_ref": "users_table", "relationship": "reads_from", "label": "Token validation" },
+        { "source_ref": "api", "target_ref": "items_table", "relationship": "reads_from", "label": "CRUD operations" },
+        { "source_ref": "api", "target_ref": "audit_table", "relationship": "writes_to", "label": "Request logging" },
+        { "source_ref": "health", "target_ref": "database", "relationship": "reads_from", "label": "DB ping" },
+        { "source_ref": "api", "target_ref": "config", "relationship": "depends_on", "label": "Runtime config" }
+    ]
+}

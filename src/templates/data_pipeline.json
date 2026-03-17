@@ -1,0 +1,78 @@
+{
+    "name": "data_pipeline",
+    "display_name": "Data Pipeline",
+    "description": "ETL/ELT data pipeline with ingestion, transformation, data warehouse, scheduling, and monitoring.",
+    "nodes": [
+        {
+            "ref": "system",
+            "name": "{{project_name}}",
+            "type": "system",
+            "description": "Root data pipeline system"
+        },
+        {
+            "ref": "ingestion",
+            "name": "Ingestion Service",
+            "type": "service",
+            "parent_ref": "system",
+            "description": "Data ingestion from external sources"
+        },
+        {
+            "ref": "queue",
+            "name": "Message Queue",
+            "type": "queue",
+            "parent_ref": "system",
+            "description": "Kafka/RabbitMQ message queue for buffering"
+        },
+        {
+            "ref": "transformer",
+            "name": "Transform Service",
+            "type": "service",
+            "parent_ref": "system",
+            "description": "Data transformation and enrichment"
+        },
+        {
+            "ref": "warehouse",
+            "name": "Data Warehouse",
+            "type": "database",
+            "parent_ref": "system",
+            "description": "Analytical data warehouse"
+        },
+        {
+            "ref": "raw_table",
+            "name": "raw_events",
+            "type": "table",
+            "parent_ref": "warehouse",
+            "description": "Raw ingested events"
+        },
+        {
+            "ref": "processed_table",
+            "name": "processed_events",
+            "type": "table",
+            "parent_ref": "warehouse",
+            "description": "Cleaned and transformed events"
+        },
+        {
+            "ref": "scheduler",
+            "name": "Scheduler",
+            "type": "service",
+            "parent_ref": "system",
+            "description": "Airflow/Prefect job scheduler"
+        },
+        {
+            "ref": "monitoring",
+            "name": "Pipeline Monitor",
+            "type": "service",
+            "parent_ref": "system",
+            "description": "Data quality monitoring and alerting"
+        }
+    ],
+    "edges": [
+        { "source_ref": "ingestion", "target_ref": "queue", "relationship": "writes_to", "label": "Raw events" },
+        { "source_ref": "queue", "target_ref": "transformer", "relationship": "connects_to", "label": "Event stream" },
+        { "source_ref": "transformer", "target_ref": "warehouse", "relationship": "writes_to", "label": "Transformed data" },
+        { "source_ref": "ingestion", "target_ref": "raw_table", "relationship": "writes_to", "label": "Raw storage" },
+        { "source_ref": "transformer", "target_ref": "processed_table", "relationship": "writes_to", "label": "Processed records" },
+        { "source_ref": "scheduler", "target_ref": "ingestion", "relationship": "calls", "label": "Trigger ingestion" },
+        { "source_ref": "monitoring", "target_ref": "warehouse", "relationship": "reads_from", "label": "Quality checks" }
+    ]
+}

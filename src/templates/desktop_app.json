@@ -1,0 +1,69 @@
+{
+    "name": "desktop_app",
+    "display_name": "Desktop Application",
+    "description": "Cross-platform desktop application with Tauri/Electron shell, frontend UI, local database, IPC layer, and auto-updater.",
+    "nodes": [
+        {
+            "ref": "system",
+            "name": "{{project_name}}",
+            "type": "system",
+            "description": "Root desktop application"
+        },
+        {
+            "ref": "shell",
+            "name": "App Shell",
+            "type": "container",
+            "parent_ref": "system",
+            "description": "Tauri/Electron native shell"
+        },
+        {
+            "ref": "frontend",
+            "name": "UI Frontend",
+            "type": "service",
+            "parent_ref": "shell",
+            "description": "Web-based UI rendered in shell"
+        },
+        {
+            "ref": "ipc",
+            "name": "IPC Bridge",
+            "type": "module",
+            "parent_ref": "shell",
+            "description": "Inter-process communication between frontend and backend"
+        },
+        {
+            "ref": "local_db",
+            "name": "Local Database",
+            "type": "database",
+            "parent_ref": "system",
+            "description": "SQLite local data storage"
+        },
+        {
+            "ref": "settings_table",
+            "name": "settings",
+            "type": "table",
+            "parent_ref": "local_db",
+            "description": "User preferences and app settings"
+        },
+        {
+            "ref": "data_table",
+            "name": "app_data",
+            "type": "table",
+            "parent_ref": "local_db",
+            "description": "Application data store"
+        },
+        {
+            "ref": "updater",
+            "name": "Auto-Updater",
+            "type": "module",
+            "parent_ref": "system",
+            "description": "Automatic update checking and installation"
+        }
+    ],
+    "edges": [
+        { "source_ref": "frontend", "target_ref": "ipc", "relationship": "calls", "label": "UI commands" },
+        { "source_ref": "ipc", "target_ref": "local_db", "relationship": "connects_to", "label": "Data access" },
+        { "source_ref": "ipc", "target_ref": "settings_table", "relationship": "reads_from", "label": "Read settings" },
+        { "source_ref": "ipc", "target_ref": "data_table", "relationship": "reads_from", "label": "App data" },
+        { "source_ref": "updater", "target_ref": "shell", "relationship": "depends_on", "label": "Version check" }
+    ]
+}
