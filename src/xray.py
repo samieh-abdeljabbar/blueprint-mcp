@@ -592,7 +592,7 @@ html, body {
 .node-rect { rx: 8; ry: 8; stroke-width: 1.5; }
 .node-name { font-weight: 700; fill: var(--text); }
 .node-type-label {
-  font-size: 10px; font-weight: 600;
+  font-size: 9px; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.5px;
 }
 .node-desc  { font-size: 11px; fill: var(--text-secondary); }
@@ -666,6 +666,29 @@ html, body {
 .tab-content::-webkit-scrollbar-track  { background: transparent; }
 .tab-content::-webkit-scrollbar-thumb  { background: var(--border); border-radius: 3px; }
 .tab-content::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* Connection summary */
+.conn-summary { display:flex; flex-wrap:wrap; gap:8px; margin:4px 0 8px; }
+.conn-stat { font-size:12px; padding:2px 8px; border-radius:10px; background:var(--bg-tertiary); color:var(--text-secondary); }
+.conn-stat.warn { color:#e53e3e; background:var(--issue-critical-bg); }
+.conn-hint { font-size:11px; color:var(--text-muted); font-style:italic; margin-top:4px; }
+
+/* Connection items */
+.conn-item { cursor:pointer; padding:6px 4px; transition:background 0.1s; display:flex; flex-wrap:wrap; align-items:center; gap:4px; }
+.conn-item:hover { background:var(--bg-tertiary); border-radius:4px; }
+.conn-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+.conn-name { font-weight:600; color:var(--accent); font-size:12px; }
+.conn-type-badge { font-size:9px; text-transform:uppercase; opacity:0.7; }
+.conn-warn { color:#e53e3e; font-size:12px; }
+.conn-edge-label { width:100%; font-size:10px; color:var(--text-secondary); font-style:italic; padding-left:10px; }
+.conn-explanation { width:100%; font-size:10px; color:var(--text-muted); padding-left:10px; }
+
+/* Back button */
+.nav-back-btn { font-size:12px; padding:4px 10px; border:1px solid var(--border); border-radius:4px; background:var(--bg); color:var(--text-secondary); cursor:pointer; margin-bottom:8px; }
+.nav-back-btn:hover { border-color:var(--accent); color:var(--accent); }
+
+/* Edge hit zone */
+.edge-hit-zone { pointer-events:stroke; }
 </style>
 </head>
 <body>
@@ -697,6 +720,15 @@ html, body {
       <button class="zoom-btn" id="zoom-in"  title="Zoom in">+</button>
       <button class="zoom-btn" id="zoom-out" title="Zoom out">&minus;</button>
       <button class="zoom-btn" id="zoom-fit" title="Zoom to fit">&#8859;</button>
+      <button class="zoom-btn" id="help-btn" title="Shortcuts">?</button>
+    </div>
+    <div id="help-panel" class="context-menu" style="display:none;bottom:48px;left:12px;position:absolute">
+      <div style="padding:8px 12px;font-size:12px;line-height:1.8;color:var(--text-secondary)">
+        <b>Dbl-click group</b> — collapse/expand<br>
+        <b>Right-click node</b> — focus neighborhood<br>
+        <b>Escape</b> — reset view<br>
+        <b>Click pill</b> — expand hidden group
+      </div>
     </div>
     <div id="minimap"><svg id="minimap-svg"></svg></div>
   </div>
@@ -810,6 +842,35 @@ const EDGE_COLORS = {
   emits:         '#38a169'
 };
 
+const EDGE_DASH = {
+  calls: null, delegates: null, uses: null,
+  depends_on: '8 4', inherits: '8 4', implements: '8 4',
+  contains: '3 3', creates: '3 3', produces: '3 3',
+  reads_from: '12 4', writes_to: '12 4', updates: '12 4'
+};
+
+const RELATIONSHIP_HELP = {
+  connects_to:   'General connection between components',
+  reads_from:    'Reads data from this source (database, cache, file)',
+  writes_to:     'Writes or persists data to this target',
+  depends_on:    'Requires this to function \u2014 cannot work without it',
+  authenticates: 'Handles auth verification through this service',
+  calls:         'Directly invokes functions or methods on this target',
+  inherits:      'Extends or subclasses this component',
+  contains:      'Parent-child: this is nested inside or owned by',
+  exposes:       'Makes functionality available externally (API, endpoint)',
+  observes:      'Watches for changes or events from this source',
+  creates:       'Instantiates or constructs instances of this target',
+  produces:      'Generates output consumed by downstream components',
+  consumes:      'Receives and processes input from this source',
+  delegates:     'Forwards responsibility to this target to handle',
+  controls:      'Manages lifecycle or behavior of this target',
+  uses:          'Utilizes functionality from this target as a dependency',
+  updates:       'Modifies state or data in this target',
+  implements:    'Provides the concrete implementation of this interface',
+  emits:         'Sends events or signals that others can listen to'
+};
+
 /* ----------------------------------------------------------------
    Mutable state
    ---------------------------------------------------------------- */
@@ -824,6 +885,10 @@ let collapsedGroups  = new Set();
 let hiddenNodes      = new Set();
 let contextMenuTarget = null;
 let focusedMode      = false;
+let tickCount        = 0;
+let lastTickTime     = 0;
+let navHistory       = [];
+let zoomFitTimer     = null;
 
 /* Global references for rebuilding */
 let gNodeData    = [];
@@ -1019,6 +1084,7 @@ function focusOnNode(nodeId, hops) {
   });
   d3.selectAll('.group-container').style('display', 'none');
   updateMinimap();
+  scheduleZoomToFit(200);
 }
 
 function showAllNodes() {
@@ -1026,6 +1092,7 @@ function showAllNodes() {
   applyCollapse();
   applyFilters();
   updateMinimap();
+  scheduleZoomToFit(200);
 }
 
 /* ================================================================
@@ -1055,6 +1122,22 @@ function renderEmptyDetail() {
     '</div>';
 }
 
+function navigateToNode(nodeId) {
+  const nd = DATA.nodes.find(n => n.id === nodeId);
+  if (!nd) return;
+  if (selectedNodeId) {
+    navHistory.push(selectedNodeId);
+    if (navHistory.length > 5) navHistory.shift();
+  }
+  selectNode(gNodeMap[nodeId] || nd);
+}
+
+function navigateBack() {
+  if (navHistory.length === 0) return;
+  const prevId = navHistory.pop();
+  selectNode(gNodeMap[prevId] || DATA.nodes.find(n => n.id === prevId));
+}
+
 function renderNodeDetail(nd) {
   const nodeMap = {};
   DATA.nodes.forEach(n => nodeMap[n.id] = n);
@@ -1064,6 +1147,12 @@ function renderNodeDetail(nd) {
   const typeColor   = TYPE_COLORS[nd.type] || '#6b7280';
 
   let h = '<div class="node-detail">';
+
+  /* Back button */
+  if (navHistory.length > 0) {
+    h += '<button class="nav-back-btn" id="nav-back-btn">\u2190 Back</button>';
+  }
+
   h += '<h2><span class="status-indicator" style="background:' + statusColor + '"></span>'
      + esc(nd.name) + '</h2>';
   h += '<span class="node-type-badge" style="background:' + typeColor + '20;color:' + typeColor + '">'
@@ -1097,21 +1186,92 @@ function renderNodeDetail(nd) {
        + esc(JSON.stringify(nd.metadata, null, 2)) + '</div>';
   }
 
+  /* ---- Connection health summary ---- */
   if (conns.length > 0) {
-    h += '<div class="field-label">Connections (' + conns.length + ')</div>';
-    h += '<ul class="connection-list">';
-    conns.forEach(e => {
-      const isSrc    = e.source_id === nd.id;
-      const otherId  = isSrc ? e.target_id : e.source_id;
-      const other    = nodeMap[otherId];
-      const otherNm  = other ? other.name : otherId.slice(0, 8);
-      const arrow    = isSrc ? '\u2192' : '\u2190';
-      h += '<li><span class="rel-badge">' + esc(e.relationship) + '</span>'
-         + arrow + ' ' + esc(otherNm);
-      if (e.label) h += ' <span style="color:var(--text-muted);font-size:10px">(' + esc(e.label) + ')</span>';
-      h += '</li>';
+    const outgoing = conns.filter(e => e.source_id === nd.id);
+    const incoming = conns.filter(e => e.target_id === nd.id);
+    const brokenConns = conns.filter(e => {
+      const oid = e.source_id === nd.id ? e.target_id : e.source_id;
+      const o = nodeMap[oid];
+      return o && (o.status === 'broken' || o.status === 'deprecated');
     });
-    h += '</ul>';
+    const plannedConns = conns.filter(e => e.status === 'planned');
+    const depsCount = conns.filter(e => e.relationship === 'depends_on').length;
+
+    h += '<div class="field-label">Connections (' + conns.length + ')</div>';
+    h += '<div class="conn-summary">';
+    h += '<span class="conn-stat">\u2192 ' + outgoing.length + ' out</span>';
+    h += '<span class="conn-stat">\u2190 ' + incoming.length + ' in</span>';
+    if (brokenConns.length > 0) h += '<span class="conn-stat warn">\u26A0 ' + brokenConns.length + ' unhealthy</span>';
+    if (plannedConns.length > 0) h += '<span class="conn-stat">\u2022 ' + plannedConns.length + ' planned</span>';
+    h += '</div>';
+
+    /* Hint */
+    let hint = '';
+    if (conns.length === 0) hint = 'Isolated';
+    else if (outgoing.length > incoming.length * 3 && incoming.length > 0) hint = 'High fan-out \u2014 this node does a lot';
+    else if (incoming.length > outgoing.length * 3 && outgoing.length > 0) hint = 'High fan-in \u2014 many things depend on this';
+    else if (brokenConns.length > 0) hint = 'Connected to ' + brokenConns.length + ' broken component(s)';
+    else if (depsCount >= 5) hint = 'Heavy dependencies';
+    if (hint) h += '<div class="conn-hint">' + hint + '</div>';
+
+    /* Detect bidirectional edges */
+    const edgePairs = {};
+    conns.forEach(e => {
+      const key = [e.source_id, e.target_id].sort().join('|');
+      if (!edgePairs[key]) edgePairs[key] = [];
+      edgePairs[key].push(e);
+    });
+    const biKeys = new Set();
+    Object.entries(edgePairs).forEach(([key, edges]) => {
+      const hasSrc = edges.some(e => e.source_id === nd.id);
+      const hasTgt = edges.some(e => e.target_id === nd.id);
+      if (hasSrc && hasTgt) biKeys.add(key);
+    });
+
+    const biEdges = [], outEdges = [], inEdges = [];
+    conns.forEach(e => {
+      const key = [e.source_id, e.target_id].sort().join('|');
+      if (biKeys.has(key)) { biEdges.push(e); }
+      else if (e.source_id === nd.id) { outEdges.push(e); }
+      else { inEdges.push(e); }
+    });
+
+    function renderConnItem(e) {
+      const isSrc = e.source_id === nd.id;
+      const otherId = isSrc ? e.target_id : e.source_id;
+      const other = nodeMap[otherId];
+      const otherName = other ? other.name : otherId.slice(0, 8);
+      const otherType = other ? other.type : '';
+      const edgeColor = EDGE_COLORS[e.relationship] || '#a0aec0';
+      const otherTypeColor = TYPE_COLORS[otherType] || '#6b7280';
+      const isUnhealthy = other && (other.status === 'broken' || other.status === 'deprecated');
+
+      let item = '<div class="conn-item" data-node-id="' + otherId + '">';
+      item += '<span class="conn-dot" style="background:' + edgeColor + '"></span>';
+      item += '<span class="rel-badge" style="background:' + edgeColor + '20;color:' + edgeColor + '">' + esc(e.relationship) + '</span>';
+      item += '<span class="conn-name">' + esc(otherName) + '</span>';
+      if (otherType) item += '<span class="conn-type-badge" style="color:' + otherTypeColor + '">' + esc(otherType) + '</span>';
+      if (isUnhealthy) item += '<span class="conn-warn">\u26A0</span>';
+      if (e.status === 'planned') item += '<span style="font-size:10px;color:var(--text-muted)">(planned)</span>';
+      if (e.label) item += '<div class="conn-edge-label">\u201C' + esc(e.label) + '\u201D</div>';
+      if (RELATIONSHIP_HELP[e.relationship]) item += '<div class="conn-explanation">' + RELATIONSHIP_HELP[e.relationship] + '</div>';
+      item += '</div>';
+      return item;
+    }
+
+    if (outEdges.length > 0) {
+      h += '<div class="field-label">\u2192 Outgoing (' + outEdges.length + ')</div>';
+      outEdges.forEach(e => { h += renderConnItem(e); });
+    }
+    if (inEdges.length > 0) {
+      h += '<div class="field-label">\u2190 Incoming (' + inEdges.length + ')</div>';
+      inEdges.forEach(e => { h += renderConnItem(e); });
+    }
+    if (biEdges.length > 0) {
+      h += '<div class="field-label">\u2194 Bidirectional (' + biEdges.length + ')</div>';
+      biEdges.forEach(e => { h += renderConnItem(e); });
+    }
   }
 
   h += '<div class="field-label">ID</div>';
@@ -1120,6 +1280,13 @@ function renderNodeDetail(nd) {
   h += '</div>';
 
   document.getElementById('tab-details').innerHTML = h;
+
+  /* Attach click handlers */
+  document.querySelectorAll('.conn-item[data-node-id]').forEach(el => {
+    el.addEventListener('click', () => { navigateToNode(el.dataset.nodeId); });
+  });
+  const backBtn = document.getElementById('nav-back-btn');
+  if (backBtn) backBtn.addEventListener('click', () => navigateBack());
 
   document.querySelectorAll('.tab-btn').forEach(b  => b.classList.remove('active'));
   document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
@@ -1276,6 +1443,17 @@ function buildGraph() {
     .filter(e => gNodeMap[e.source_id] && gNodeMap[e.target_id])
     .map(e => ({ ...e, source: e.source_id, target: e.target_id }));
 
+  const edgePairCount = {};
+  gEdgeData.forEach(e => {
+    const key = [e.source_id, e.target_id].sort().join('|');
+    if (!edgePairCount[key]) edgePairCount[key] = 0;
+    e._pairIndex = edgePairCount[key]++;
+  });
+  gEdgeData.forEach(e => {
+    const key = [e.source_id, e.target_id].sort().join('|');
+    e._pairTotal = edgePairCount[key];
+  });
+
   /* ---- Identify parent/child grouping ---- */
   gParentIds  = new Set(gNodeData.filter(n => n.parent_id).map(n => n.parent_id));
   gChildrenOf = {};
@@ -1343,7 +1521,13 @@ function buildGraph() {
   gEdgeGroups.append('path')
     .attr('class', d => 'edge-line' + (d.status === 'planned' ? ' planned' : ''))
     .attr('stroke', d => EDGE_COLORS[d.relationship] || '#a0aec0')
+    .attr('stroke-dasharray', d => d.status === 'planned' ? '6 4' : (EDGE_DASH[d.relationship] || null))
     .attr('marker-end', d => 'url(#arrow-' + d.relationship + ')');
+
+  gEdgeGroups.append('path')
+    .attr('class', 'edge-hit-zone')
+    .attr('stroke', 'transparent').attr('stroke-width', 12)
+    .attr('fill', 'none').style('pointer-events', 'stroke');
 
   gEdgeGroups.append('text')
     .attr('class', 'edge-label')
@@ -1357,6 +1541,15 @@ function buildGraph() {
     .attr('id', d => 'node-' + d.id)
     .on('click', (event, d) => { event.stopPropagation(); selectNode(d); })
     .on('contextmenu', (event, d) => showContextMenu(event, d))
+    .on('mouseenter', (event, d) => {
+      gEdgeGroups.select('.edge-label').style('opacity', e => {
+        const s = e.source.id || e.source, t = e.target.id || e.target;
+        return (s === d.id || t === d.id) ? 1 : null;
+      });
+    })
+    .on('mouseleave', () => {
+      if (!selectedNodeId) gEdgeGroups.select('.edge-label').style('opacity', null);
+    })
     .on('dblclick', (event, d) => {
       event.stopPropagation();
       if (gChildrenOf[d.id]) toggleCollapse(d.id);
@@ -1391,17 +1584,17 @@ function buildGraph() {
     .attr('fill', d => TYPE_COLORS[d.type] || '#6b7280');
 
   /* Type badge pill */
-  gNodeGroups.append('rect')
-    .attr('x', d => d.w - (d.type.length * 6 + 18))
+  gNodeGroups.filter(d => d.w > 120).append('rect')
+    .attr('x', d => d.w - (d.type.length * 5.5 + 10))
     .attr('y', 6)
-    .attr('width', d => d.type.length * 6 + 12)
+    .attr('width', d => d.type.length * 5.5 + 10)
     .attr('height', 16).attr('rx', 8)
     .attr('fill', d => TYPE_COLORS[d.type] || '#6b7280')
     .attr('fill-opacity', 0.15);
 
-  gNodeGroups.append('text')
+  gNodeGroups.filter(d => d.w > 120).append('text')
     .attr('class', 'node-type-label')
-    .attr('x', d => d.w - 10).attr('y', 18)
+    .attr('x', d => d.w - 8).attr('y', 18)
     .attr('text-anchor', 'end')
     .attr('fill', d => TYPE_COLORS[d.type] || '#6b7280')
     .text(d => d.type);
@@ -1411,7 +1604,12 @@ function buildGraph() {
     .attr('class', 'node-name')
     .attr('x', 12).attr('y', d => d.h <= 36 ? d.h / 2 + 4 : 24)
     .attr('font-size', d => d.h <= 36 ? '12px' : '14px')
-    .text(d => trunc(d.name, Math.floor((d.w - 70) / 8)));
+    .text(d => trunc(d.name, Math.floor((d.w - 40) / 7)));
+
+  /* SVG title tooltip */
+  gNodeGroups.append('title')
+    .text(d => d.name + ' (' + d.type + ', ' + d.status + ')'
+      + (d.description ? '\n' + d.description : ''));
 
   /* Description (only for h >= 48) */
   gNodeGroups.filter(d => d.h >= 48).append('text')
@@ -1448,6 +1646,10 @@ function buildGraph() {
   document.getElementById('zoom-in').addEventListener('click',  () => svgEl.transition().duration(300).call(zoom.scaleBy, 1.3));
   document.getElementById('zoom-out').addEventListener('click', () => svgEl.transition().duration(300).call(zoom.scaleBy, 0.7));
   document.getElementById('zoom-fit').addEventListener('click', () => zoomToFit());
+  document.getElementById('help-btn').addEventListener('click', () => {
+    const p = document.getElementById('help-panel');
+    p.style.display = p.style.display === 'none' ? 'block' : 'none';
+  });
 }
 
 /* ================================================================
@@ -1459,7 +1661,7 @@ function clusterForce() {
     nodes.forEach(d => {
       if (d.parent_id && gNodeMap[d.parent_id]) {
         const parent = gNodeMap[d.parent_id];
-        d.vx += (parent.x - d.x) * alpha * 0.5;
+        d.vx += (parent.x - d.x) * 0.15;
         d.vy += (parent.y - d.y) * alpha * 0.5;
       }
     });
@@ -1468,14 +1670,56 @@ function clusterForce() {
   return force;
 }
 
+function groupRepulsionForce() {
+  let nodes;
+  function force(alpha) {
+    const boxes = {};
+    nodes.forEach(d => {
+      const pid = d.parent_id;
+      if (!pid || !gParentIds.has(pid)) return;
+      if (!boxes[pid]) boxes[pid] = { x1:Infinity, y1:Infinity, x2:-Infinity, y2:-Infinity, nodes:[] };
+      const b = boxes[pid];
+      b.x1 = Math.min(b.x1, d.x - d.w/2); b.y1 = Math.min(b.y1, d.y - d.h/2);
+      b.x2 = Math.max(b.x2, d.x + d.w/2); b.y2 = Math.max(b.y2, d.y + d.h/2);
+      b.nodes.push(d);
+    });
+    const pids = Object.keys(boxes);
+    for (let i = 0; i < pids.length; i++) {
+      for (let j = i+1; j < pids.length; j++) {
+        const da = gDepthMap[pids[i]] || 0, db = gDepthMap[pids[j]] || 0;
+        if (da !== db) continue;
+        const a = boxes[pids[i]], b = boxes[pids[j]];
+        const pad = 50;
+        const ox = Math.min(a.x2+pad, b.x2+pad) - Math.max(a.x1-pad, b.x1-pad);
+        const oy = Math.min(a.y2+pad, b.y2+pad) - Math.max(a.y1-pad, b.y1-pad);
+        if (ox > 0 && oy > 0) {
+          const dx = ((a.x1+a.x2)/2) - ((b.x1+b.x2)/2);
+          const sep = (dx >= 0 ? 1 : -1) * alpha * 0.8;
+          a.nodes.forEach(n => { n.vx += sep; });
+          b.nodes.forEach(n => { n.vx -= sep; });
+        }
+      }
+    }
+  }
+  force.initialize = function(_) { nodes = _; };
+  return force;
+}
+
 function rebuildSimulation() {
   if (simulation) simulation.stop();
+  tickCount = 0;
 
   simulation = d3.forceSimulation(gNodeData)
-    .force('link', d3.forceLink(gEdgeData).id(d => d.id).distance(220).strength(0.4))
+    .force('link', d3.forceLink(gEdgeData).id(d => d.id)
+      .distance(d => {
+        const s = gNodeMap[d.source.id || d.source];
+        const t = gNodeMap[d.target.id || d.target];
+        return (s && t && s.parent_id && s.parent_id === t.parent_id) ? 220 : 180;
+      }).strength(0.4))
     .force('collision', d3.forceCollide().radius(d => Math.max(d.w, d.h) / 2 + 20).strength(0.8))
-    .force('x', d3.forceX(gW / 2).strength(0.02))
-    .alphaDecay(0.02);
+    .force('x', d3.forceX(gW / 2).strength(0.04))
+    .alphaDecay(0.02)
+    .alphaMin(0.01);
 
   if (layoutMode === 'clustered') {
     simulation
@@ -1485,7 +1729,8 @@ function rebuildSimulation() {
         const tier = TIER_Y[d.type];
         return (tier !== undefined ? tier : 0.5) * gH;
       }).strength(0.3))
-      .force('cluster', clusterForce());
+      .force('cluster', clusterForce())
+      .force('groupRepulsion', groupRepulsionForce());
   } else {
     simulation
       .force('charge', d3.forceManyBody().strength(-800).distanceMax(600))
@@ -1494,7 +1739,14 @@ function rebuildSimulation() {
   }
 
   simulation
-    .on('tick', onTick)
+    .on('tick', () => {
+      tickCount++;
+      if (tickCount > 500) { simulation.stop(); return; }
+      const now = performance.now();
+      if (now - lastTickTime < 16) return;
+      lastTickTime = now;
+      onTick();
+    })
     .on('end', () => { zoomToFit(); updateMinimap(); });
 
   simulation.alpha(1).restart();
@@ -1504,12 +1756,26 @@ function onTick() {
   gNodeGroups.attr('transform', d =>
     'translate(' + (d.x - d.w / 2) + ',' + (d.y - d.h / 2) + ')');
 
-  gEdgeGroups.select('path').attr('d', d => {
+  gEdgeGroups.select('.edge-line').attr('d', d => {
     const sx = d.source.x, sy = d.source.y;
     const tx = d.target.x, ty = d.target.y;
     const dx = tx - sx, dy = ty - sy;
-    const dr = Math.sqrt(dx * dx + dy * dy) * 0.7;
-    return 'M' + sx + ',' + sy + 'A' + dr + ',' + dr + ' 0 0,1 ' + tx + ',' + ty;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const offset = (d._pairTotal > 1) ? (d._pairIndex - (d._pairTotal-1)/2) * 0.3 : 0;
+    const dr = dist * (0.7 + offset);
+    const sweep = d._pairIndex % 2 === 0 ? 1 : 0;
+    return 'M'+sx+','+sy+'A'+Math.abs(dr)+','+Math.abs(dr)+' 0 0,'+sweep+' '+tx+','+ty;
+  });
+
+  gEdgeGroups.select('.edge-hit-zone').attr('d', d => {
+    const sx = d.source.x, sy = d.source.y;
+    const tx = d.target.x, ty = d.target.y;
+    const dx = tx - sx, dy = ty - sy;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const offset = (d._pairTotal > 1) ? (d._pairIndex - (d._pairTotal-1)/2) * 0.3 : 0;
+    const dr = dist * (0.7 + offset);
+    const sweep = d._pairIndex % 2 === 0 ? 1 : 0;
+    return 'M'+sx+','+sy+'A'+Math.abs(dr)+','+Math.abs(dr)+' 0 0,'+sweep+' '+tx+','+ty;
   });
 
   gEdgeGroups.select('text')
@@ -1533,7 +1799,7 @@ function updateGroupBGs() {
       .filter(n => !hiddenNodes.has(n.id));
     if (children.length === 0) return;
     const all = [parent, ...children];
-    const pad = 30;
+    const pad = 50;
     const x1  = d3.min(all, n => n.x - n.w / 2)  - pad;
     const y1  = d3.min(all, n => n.y - n.h / 2) - pad - 18;
     const x2  = d3.max(all, n => n.x + n.w / 2)  + pad;
@@ -1583,20 +1849,22 @@ function updateGroupBGs() {
   /* Render collapsed pills */
   const pillSel = gGroupG.selectAll('.collapsed-pill').data(pills, d => d.id);
   const pillEntered = pillSel.enter().append('g').attr('class', 'collapsed-pill')
-    .on('dblclick', (event, d) => { event.stopPropagation(); toggleCollapse(d.parentId); });
+    .on('click', (event, d) => { event.stopPropagation(); toggleCollapse(d.parentId); });
   pillEntered.append('rect');
   pillEntered.append('text');
   const pillMerged = pillEntered.merge(pillSel);
   pillMerged.select('rect')
-    .attr('x', d => d.x - 50).attr('y', d => d.y - 10)
-    .attr('width', 100).attr('height', 20)
-    .attr('fill', d => d.typeColor).attr('fill-opacity', 0.1)
+    .attr('x', d => { const pillW = Math.max(100, d.name.length * 7 + 40); return d.x - pillW/2; })
+    .attr('y', d => d.y - 10)
+    .attr('width', d => Math.max(100, d.name.length * 7 + 40)).attr('height', 20)
+    .attr('fill', d => d.typeColor).attr('fill-opacity', 0.15)
     .attr('stroke', d => d.typeColor).attr('stroke-opacity', 0.3);
   pillMerged.select('text')
     .attr('x', d => d.x).attr('y', d => d.y + 4)
     .attr('text-anchor', 'middle')
     .attr('font-size', '10px')
-    .text(d => d.count + ' hidden');
+    .attr('fill', d => d.typeColor)
+    .text(d => '\u25B6 ' + d.name + ' (' + d.count + ')');
   pillSel.exit().remove();
 }
 
@@ -1624,6 +1892,7 @@ function applyCollapse() {
     d3.select(this).style('display', (hiddenNodes.has(s) || hiddenNodes.has(t)) ? 'none' : null);
   });
   updateMinimap();
+  scheduleZoomToFit(200);
 }
 
 /* ================================================================
@@ -1699,11 +1968,19 @@ function updateMinimap() {
 /* ================================================================
    ZOOM TO FIT
    ================================================================ */
+function scheduleZoomToFit(delay) {
+  if (zoomFitTimer) clearTimeout(zoomFitTimer);
+  zoomFitTimer = setTimeout(() => { zoomToFit(); updateMinimap(); }, delay || 200);
+}
+
 function zoomToFit() {
   const ctr   = document.getElementById('canvas-panel');
   const W     = ctr.clientWidth;
   const H     = ctr.clientHeight;
-  const nodes = d3.selectAll('.node-group').data().filter(n => !hiddenNodes.has(n.id));
+  const nodes = d3.selectAll('.node-group')
+    .filter(function(d) {
+      return !hiddenNodes.has(d.id) && d3.select(this).style('display') !== 'none';
+    }).data();
   if (nodes.length === 0) return;
 
   const pad = 60;
