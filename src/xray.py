@@ -753,6 +753,56 @@ html, body {
 .legend-edge-line {
   width: 30px; height: 2px; flex-shrink: 0;
 }
+
+/* ================================================================
+   STATUS SUMMARY BAR
+   ================================================================ */
+.status-summary {
+  display: flex; gap: 10px; align-items: center;
+  font-size: 11px; margin-left: 8px;
+  padding-left: 8px; border-left: 1px solid var(--border);
+}
+.status-item {
+  display: flex; align-items: center; gap: 4px;
+  white-space: nowrap; color: var(--text-secondary);
+}
+.status-dot {
+  width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+}
+
+/* ================================================================
+   ONBOARDING OVERLAY
+   ================================================================ */
+#onboarding-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.45); z-index: 2000;
+  display: flex; align-items: center; justify-content: center;
+}
+.onboarding-card {
+  background: var(--bg); border-radius: 12px;
+  box-shadow: 0 8px 32px var(--shadow-lg);
+  padding: 28px 32px; max-width: 420px; width: 90%;
+}
+.onboarding-card h3 {
+  font-size: 18px; margin-bottom: 16px; color: var(--text);
+}
+.onboarding-hints { list-style: none; margin: 0 0 20px; }
+.onboarding-hint {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 8px 0; font-size: 13px; color: var(--text-secondary);
+  line-height: 1.5;
+}
+.onboarding-hint .hint-icon {
+  flex-shrink: 0; width: 22px; text-align: center; font-size: 15px;
+}
+.onboarding-dismiss {
+  display: block; width: 100%;
+  padding: 10px; border: none; border-radius: 8px;
+  background: var(--accent); color: #fff;
+  font-size: 14px; font-weight: 600; cursor: pointer;
+  transition: background 0.15s;
+}
+.onboarding-dismiss:hover { background: var(--accent-hover); }
 </style>
 </head>
 <body>
@@ -765,6 +815,7 @@ html, body {
   <span class="timestamp" id="timestamp"></span>
   <input type="text" id="search-input" placeholder="Search nodes...">
   <div class="stats-bar" id="stats-bar"></div>
+  <div class="status-summary" id="status-summary"></div>
   <div class="filter-group" id="filter-group"></div>
   <button id="theme-toggle" title="Toggle theme">&#9681;</button>
 </div>
@@ -969,6 +1020,7 @@ document.addEventListener('DOMContentLoaded', () => {
     '<span>' + DATA.edges.length   + ' edges</span>' +
     '<span>' + DATA.issues.length  + ' issues</span>' +
     '<span>' + DATA.questions.length + ' questions</span>';
+  buildStatusSummary();
 
   initFilters();
   initTabs();
@@ -982,7 +1034,64 @@ document.addEventListener('DOMContentLoaded', () => {
   renderQuestions();
   renderEmptyDetail();
   buildGraph();
+  initOnboarding();
 });
+
+/* ================================================================
+   STATUS SUMMARY BAR
+   ================================================================ */
+function buildStatusSummary() {
+  const counts = {};
+  DATA.nodes.forEach(n => { counts[n.status] = (counts[n.status] || 0) + 1; });
+  const bar = document.getElementById('status-summary');
+  let h = '';
+  const order = ['built','in_progress','planned','broken','deprecated'];
+  order.forEach(s => {
+    if (!counts[s]) return;
+    h += '<span class="status-item">';
+    h += '<span class="status-dot" style="background:' + (STATUS_COLORS[s] || '#a0aec0') + '"></span>';
+    h += counts[s] + ' ' + s.replace('_', ' ');
+    h += '</span>';
+  });
+  bar.innerHTML = h;
+}
+
+/* ================================================================
+   ONBOARDING OVERLAY
+   ================================================================ */
+function initOnboarding() {
+  var shouldShow = false;
+  try { shouldShow = !localStorage.getItem('blueprint-xray-onboarded'); } catch(e) { shouldShow = true; }
+  if (DATA.nodes.length === 0) shouldShow = true;
+  if (!shouldShow) return;
+
+  var overlay = document.createElement('div');
+  overlay.id = 'onboarding-overlay';
+  overlay.innerHTML =
+    '<div class="onboarding-card">' +
+      '<h3>Welcome to Blueprint X-Ray</h3>' +
+      '<div class="onboarding-hints">' +
+        '<div class="onboarding-hint"><span class="hint-icon">&#127912;</span><span>Colors represent component types \u2014 hover the legend for details</span></div>' +
+        '<div class="onboarding-hint"><span class="hint-icon">&#128433;</span><span>Click a node to see its details, connections, and status</span></div>' +
+        '<div class="onboarding-hint"><span class="hint-icon">&#128269;</span><span>Right-click a node to focus on its neighborhood</span></div>' +
+        '<div class="onboarding-hint"><span class="hint-icon">&#10068;</span><span>Press the ? button for the full visual legend and shortcuts</span></div>' +
+      '</div>' +
+      '<button class="onboarding-dismiss">Got it</button>' +
+    '</div>';
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('.onboarding-dismiss').addEventListener('click', dismissOnboarding);
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) dismissOnboarding(); });
+  document.addEventListener('keydown', function onEsc(e) {
+    if (e.key === 'Escape') { dismissOnboarding(); document.removeEventListener('keydown', onEsc); }
+  });
+}
+
+function dismissOnboarding() {
+  var overlay = document.getElementById('onboarding-overlay');
+  if (overlay) overlay.remove();
+  try { localStorage.setItem('blueprint-xray-onboarded', '1'); } catch(e) {}
+}
 
 /* ================================================================
    FILTERS (category-based)

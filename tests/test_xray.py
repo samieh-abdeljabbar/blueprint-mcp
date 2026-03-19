@@ -120,3 +120,31 @@ async def test_legend_contains_all_categories(db: Database, tmp_path):
     ]
     for cat in categories:
         assert cat in html, f"Legend missing category: {cat}"
+
+
+# --- Stage 3: Onboarding + Status Summary tests ---
+
+
+async def test_status_summary_bar_present(db: Database, tmp_path):
+    """HTML contains the status-summary bar element."""
+    output = str(tmp_path / "test.html")
+    await render_blueprint(db, output_path=output)
+    html = open(output).read()
+    assert 'id="status-summary"' in html
+
+
+async def test_onboarding_overlay_present(db: Database, tmp_path):
+    """HTML contains the onboarding initialization and Got it button."""
+    output = str(tmp_path / "test.html")
+    await render_blueprint(db, output_path=output)
+    html = open(output).read()
+    assert "initOnboarding" in html
+    assert "Got it" in html
+
+
+async def test_onboarding_uses_localstorage(db: Database, tmp_path):
+    """HTML contains localStorage key for onboarding dismissal."""
+    output = str(tmp_path / "test.html")
+    await render_blueprint(db, output_path=output)
+    html = open(output).read()
+    assert "blueprint-xray-onboarded" in html
