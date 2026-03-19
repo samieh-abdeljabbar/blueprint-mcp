@@ -218,6 +218,9 @@ html, body {
   cursor: pointer;
   transition: all 0.15s;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 .filter-btn:hover { border-color: var(--accent); color: var(--accent); }
 .filter-btn.active {
@@ -225,6 +228,14 @@ html, body {
   color: #fff;
   border-color: var(--accent);
 }
+.filter-dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.filter-btn.active .filter-dot { background: #fff !important; }
+
 #theme-toggle {
   width: 32px; height: 32px;
   border: 1px solid var(--border);
@@ -240,7 +251,7 @@ html, body {
 #theme-toggle:hover { border-color: var(--accent); color: var(--accent); }
 
 /* ================================================================
-   MAIN LAYOUT — left 65 % canvas, right 35 % panel
+   MAIN LAYOUT -- left 65% canvas, right 35% panel
    ================================================================ */
 #main {
   display: flex;
@@ -298,7 +309,7 @@ html, body {
 .tab-pane.active { display: block; }
 
 /* ================================================================
-   DETAIL PANEL (right — Details tab)
+   DETAIL PANEL (right -- Details tab)
    ================================================================ */
 .detail-empty {
   display: flex;
@@ -515,6 +526,57 @@ html, body {
 .zoom-btn:hover { border-color: var(--accent); color: var(--accent); }
 
 /* ================================================================
+   LAYOUT TOGGLE
+   ================================================================ */
+.layout-toggle {
+  position: absolute;
+  top: 12px; left: 12px;
+  display: flex; gap: 0;
+  z-index: 10;
+}
+.layout-btn {
+  padding: 6px 12px;
+  font-size: 11px; font-weight: 600;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+  box-shadow: 0 1px 3px var(--shadow);
+}
+.layout-btn:first-child { border-radius: 6px 0 0 6px; }
+.layout-btn:last-child  { border-radius: 0 6px 6px 0; border-left: none; }
+.layout-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.layout-btn:hover:not(.active) { border-color: var(--accent); color: var(--accent); }
+
+/* ================================================================
+   CONTEXT MENU
+   ================================================================ */
+.context-menu {
+  position: fixed;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px var(--shadow-lg);
+  padding: 4px;
+  z-index: 1000;
+  min-width: 200px;
+}
+.context-menu-item {
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.1s;
+}
+.context-menu-item:hover { background: var(--bg-tertiary); }
+
+/* ================================================================
    STATS BAR
    ================================================================ */
 .stats-bar {
@@ -526,10 +588,9 @@ html, body {
 /* ================================================================
    D3 GRAPH ELEMENTS
    ================================================================ */
-.node-group { cursor: pointer; }
+.node-group { cursor: pointer; transition: opacity 0.3s; }
 .node-rect { rx: 8; ry: 8; stroke-width: 1.5; }
-.node-status-bar { rx: 8; ry: 8; }
-.node-name { font-size: 14px; font-weight: 700; fill: var(--text); }
+.node-name { font-weight: 700; fill: var(--text); }
 .node-type-label {
   font-size: 10px; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.5px;
@@ -541,7 +602,7 @@ html, body {
   fill: var(--text-muted);
 }
 
-.edge-line { fill: none; stroke-width: 1.5; opacity: 0.6; }
+.edge-line { fill: none; stroke-width: 1.5; opacity: 0.15; }
 .edge-label {
   font-size: 10px; fill: var(--text-muted);
   opacity: 0; pointer-events: none;
@@ -555,22 +616,49 @@ html, body {
 }
 @keyframes dashflow { to { stroke-dashoffset: -10; } }
 
-.node-group.dimmed       { opacity: 0.2; transition: opacity 0.3s; }
-.node-group.highlighted  { opacity: 1;   transition: opacity 0.3s; }
+.node-group.dimmed       { opacity: 0.15 !important; }
+.node-group.highlighted  { opacity: 1 !important; }
 .edge-group.dimmed       { opacity: 0.05; transition: opacity 0.3s; }
 .edge-group.highlighted  { opacity: 1;    transition: opacity 0.3s; }
 .edge-group.highlighted .edge-line { stroke-width: 2.5; opacity: 0.9; }
+.edge-group.highlighted .edge-label { opacity: 1; }
+
+/* ---- STATUS ENCODING ---- */
+@keyframes pulse-bar {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+.status-bar-in_progress {
+  animation: pulse-bar 2s ease-in-out infinite;
+}
 
 /* ---- GROUP / PARENT NODES ---- */
 .group-bg {
   rx: 12; ry: 12;
-  stroke-dasharray: 4 2;
-  opacity: 0.15;
+  pointer-events: all;
+  cursor: pointer;
 }
 .group-label {
-  font-size: 12px; font-weight: 700;
+  font-size: 11px; font-weight: 700;
   fill: var(--text-muted);
   text-transform: uppercase; letter-spacing: 0.5px;
+  pointer-events: none;
+}
+.group-count {
+  font-size: 10px;
+  fill: var(--text-muted);
+  pointer-events: none;
+}
+.collapsed-pill {
+  cursor: pointer;
+}
+.collapsed-pill rect {
+  rx: 12; ry: 12;
+}
+.collapsed-pill text {
+  font-size: 11px; font-weight: 600;
+  fill: var(--text-secondary);
+  pointer-events: none;
 }
 
 /* ---- SCROLLBAR ---- */
@@ -598,9 +686,13 @@ html, body {
      MAIN LAYOUT
      ============================================================ -->
 <div id="main">
-  <!-- LEFT: D3 canvas (65 %) -->
+  <!-- LEFT: D3 canvas (65%) -->
   <div id="canvas-panel">
     <svg id="graph-svg"></svg>
+    <div class="layout-toggle">
+      <button class="layout-btn active" data-layout="clustered">Clustered</button>
+      <button class="layout-btn" data-layout="force">Force</button>
+    </div>
     <div class="zoom-controls">
       <button class="zoom-btn" id="zoom-in"  title="Zoom in">+</button>
       <button class="zoom-btn" id="zoom-out" title="Zoom out">&minus;</button>
@@ -609,7 +701,7 @@ html, body {
     <div id="minimap"><svg id="minimap-svg"></svg></div>
   </div>
 
-  <!-- RIGHT: insight panel (35 %) -->
+  <!-- RIGHT: insight panel (35%) -->
   <div id="right-panel">
     <div class="tabs">
       <button class="tab-btn active" data-tab="details">Details</button>
@@ -624,6 +716,12 @@ html, body {
   </div>
 </div>
 
+<!-- Context menu (hidden by default) -->
+<div id="context-menu" class="context-menu" style="display:none">
+  <div class="context-menu-item" id="ctx-focus">Focus (2-hop neighborhood)</div>
+  <div class="context-menu-item" id="ctx-show-all">Show all</div>
+</div>
+
 <!-- ============================================================
      JAVASCRIPT
      ============================================================ -->
@@ -634,8 +732,54 @@ html, body {
 const DATA = __BLUEPRINT_DATA__;
 
 /* ----------------------------------------------------------------
-   Constants
+   Constants -- Type Colors (9 categories)
    ---------------------------------------------------------------- */
+const TYPE_COLORS = {
+  system: '#6366f1', container: '#6366f1',
+  service: '#8b5cf6', worker: '#8b5cf6',
+  api: '#10b981', route: '#10b981', webhook: '#10b981', middleware: '#10b981',
+  database: '#f59e0b', table: '#f59e0b', column: '#f59e0b', cache: '#f59e0b', queue: '#f59e0b',
+  function: '#3b82f6', class_def: '#3b82f6', module: '#3b82f6', struct: '#3b82f6', protocol: '#3b82f6',
+  file: '#6b7280', script: '#6b7280', config: '#6b7280', migration: '#6b7280',
+  model: '#ec4899', schema: '#ec4899', enum_def: '#ec4899', view: '#ec4899', util: '#ec4899',
+  external: '#ef4444', submodule: '#ef4444',
+  test: '#14b8a6'
+};
+
+const TYPE_CATEGORIES = {
+  'Infrastructure': { types: ['system','container'], color: '#6366f1' },
+  'Services':       { types: ['service','worker'], color: '#8b5cf6' },
+  'API':            { types: ['api','route','webhook','middleware'], color: '#10b981' },
+  'Data':           { types: ['database','table','column','cache','queue'], color: '#f59e0b' },
+  'Code':           { types: ['function','class_def','module','struct','protocol'], color: '#3b82f6' },
+  'Files':          { types: ['file','script','config','migration'], color: '#6b7280' },
+  'Schema':         { types: ['model','schema','enum_def','view','util'], color: '#ec4899' },
+  'External':       { types: ['external','submodule'], color: '#ef4444' },
+  'Testing':        { types: ['test'], color: '#14b8a6' }
+};
+
+const NODE_SIZES = {
+  system: [200,60], container: [200,60],
+  service: [160,48], module: [160,48], database: [160,48], api: [160,48], worker: [160,48],
+  function: [140,40], route: [140,40], table: [140,40], class_def: [140,40],
+    middleware: [140,40], webhook: [140,40], struct: [140,40], protocol: [140,40], test: [140,40],
+  column: [120,32], config: [120,32], file: [120,32], script: [120,32],
+    migration: [120,32], cache: [120,32], queue: [120,32], external: [120,32],
+    submodule: [120,32], model: [120,32], schema: [120,32], enum_def: [120,32],
+    view: [120,32], util: [120,32]
+};
+
+const TIER_Y = {
+  system: 0.1, container: 0.1,
+  service: 0.3, worker: 0.3, module: 0.35, database: 0.3, api: 0.25,
+  function: 0.55, route: 0.5, table: 0.6, class_def: 0.55,
+    middleware: 0.5, webhook: 0.5, struct: 0.55, protocol: 0.55,
+  column: 0.75, config: 0.75, file: 0.75, external: 0.7,
+    script: 0.75, migration: 0.75, cache: 0.65, queue: 0.65,
+    model: 0.6, schema: 0.6, enum_def: 0.65, view: 0.6, util: 0.65,
+    submodule: 0.7, test: 0.8
+};
+
 const STATUS_COLORS = {
   built:       '#38a169',
   planned:     '#4299e1',
@@ -666,18 +810,32 @@ const EDGE_COLORS = {
   emits:         '#38a169'
 };
 
-const NODE_WIDTH  = 260;
-const NODE_HEIGHT = 88;
-
 /* ----------------------------------------------------------------
    Mutable state
    ---------------------------------------------------------------- */
-let selectedNodeId = null;
-let activeFilters  = new Set();
-let simulation     = null;
-let mainG          = null;
-let zoom           = null;
-let svgEl          = null;
+let selectedNodeId   = null;
+let activeFilters    = new Set();
+let simulation       = null;
+let mainG            = null;
+let zoom             = null;
+let svgEl            = null;
+let layoutMode       = 'clustered';
+let collapsedGroups  = new Set();
+let hiddenNodes      = new Set();
+let contextMenuTarget = null;
+let focusedMode      = false;
+
+/* Global references for rebuilding */
+let gNodeData    = [];
+let gEdgeData    = [];
+let gNodeMap     = {};
+let gChildrenOf  = {};
+let gParentIds   = new Set();
+let gDepthMap    = {};
+let gNodeGroups  = null;
+let gEdgeGroups  = null;
+let gGroupG      = null;
+let gW = 0, gH = 0;
 
 /* ================================================================
    BOOTSTRAP
@@ -696,6 +854,9 @@ document.addEventListener('DOMContentLoaded', () => {
   initTabs();
   initSearch();
   initThemeToggle();
+  initEscapeKey();
+  initContextMenu();
+  initLayoutToggle();
   renderHealth();
   renderQuestions();
   renderEmptyDetail();
@@ -703,19 +864,21 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /* ================================================================
-   FILTERS
+   FILTERS (category-based)
    ================================================================ */
 function initFilters() {
-  const types = [...new Set(DATA.nodes.map(n => n.type))].sort();
+  const presentTypes = new Set(DATA.nodes.map(n => n.type));
   const group = document.getElementById('filter-group');
-  types.forEach(t => {
+  Object.entries(TYPE_CATEGORIES).forEach(([cat, info]) => {
+    if (!info.types.some(t => presentTypes.has(t))) return;
     const btn = document.createElement('button');
     btn.className = 'filter-btn';
-    btn.textContent = t;
+    btn.dataset.category = cat;
+    btn.innerHTML = '<span class="filter-dot" style="background:' + info.color + '"></span>' + cat;
     btn.addEventListener('click', () => {
       btn.classList.toggle('active');
-      if (activeFilters.has(t)) activeFilters.delete(t);
-      else activeFilters.add(t);
+      if (activeFilters.has(cat)) activeFilters.delete(cat);
+      else activeFilters.add(cat);
       applyFilters();
     });
     group.appendChild(btn);
@@ -724,8 +887,17 @@ function initFilters() {
 
 function applyFilters() {
   const term = document.getElementById('search-input').value.toLowerCase();
+  let visibleTypes = null;
+  if (activeFilters.size > 0) {
+    visibleTypes = new Set();
+    activeFilters.forEach(cat => {
+      TYPE_CATEGORIES[cat].types.forEach(t => visibleTypes.add(t));
+    });
+  }
+
   d3.selectAll('.node-group').each(function(d) {
-    const okType   = activeFilters.size === 0 || activeFilters.has(d.type);
+    if (hiddenNodes.has(d.id)) { d3.select(this).style('display', 'none'); return; }
+    const okType   = !visibleTypes || visibleTypes.has(d.type);
     const okSearch = !term ||
       d.name.toLowerCase().includes(term) ||
       (d.description && d.description.toLowerCase().includes(term)) ||
@@ -740,6 +912,7 @@ function applyFilters() {
 }
 
 function isNodeVisible(nodeId) {
+  if (hiddenNodes.has(nodeId)) return false;
   const el = d3.select('#node-' + CSS.escape(nodeId));
   return !el.empty() && el.style('display') !== 'none';
 }
@@ -777,6 +950,101 @@ function initThemeToggle() {
 }
 
 /* ================================================================
+   ESCAPE KEY
+   ================================================================ */
+function initEscapeKey() {
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      deselectAll();
+      if (focusedMode) showAllNodes();
+      hideContextMenu();
+    }
+  });
+}
+
+/* ================================================================
+   CONTEXT MENU
+   ================================================================ */
+function initContextMenu() {
+  document.getElementById('ctx-focus').addEventListener('click', () => {
+    if (contextMenuTarget) focusOnNode(contextMenuTarget.id, 2);
+    hideContextMenu();
+  });
+  document.getElementById('ctx-show-all').addEventListener('click', () => {
+    showAllNodes();
+    hideContextMenu();
+  });
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.context-menu')) hideContextMenu();
+  });
+}
+
+function showContextMenu(event, d) {
+  event.preventDefault();
+  event.stopPropagation();
+  contextMenuTarget = d;
+  const menu = document.getElementById('context-menu');
+  menu.style.left = event.pageX + 'px';
+  menu.style.top  = event.pageY + 'px';
+  menu.style.display = 'block';
+}
+
+function hideContextMenu() {
+  document.getElementById('context-menu').style.display = 'none';
+  contextMenuTarget = null;
+}
+
+function focusOnNode(nodeId, hops) {
+  const visited = new Set([nodeId]);
+  let frontier = [nodeId];
+  for (let i = 0; i < hops; i++) {
+    const next = [];
+    frontier.forEach(nid => {
+      DATA.edges.forEach(e => {
+        if (e.source_id === nid && !visited.has(e.target_id)) {
+          visited.add(e.target_id); next.push(e.target_id);
+        }
+        if (e.target_id === nid && !visited.has(e.source_id)) {
+          visited.add(e.source_id); next.push(e.source_id);
+        }
+      });
+    });
+    frontier = next;
+  }
+  focusedMode = true;
+  d3.selectAll('.node-group').style('display', d => visited.has(d.id) ? null : 'none');
+  d3.selectAll('.edge-group').style('display', d => {
+    const s = d.source.id || d.source, t = d.target.id || d.target;
+    return (visited.has(s) && visited.has(t)) ? null : 'none';
+  });
+  d3.selectAll('.group-container').style('display', 'none');
+  updateMinimap();
+}
+
+function showAllNodes() {
+  focusedMode = false;
+  applyCollapse();
+  applyFilters();
+  updateMinimap();
+}
+
+/* ================================================================
+   LAYOUT TOGGLE
+   ================================================================ */
+function initLayoutToggle() {
+  document.querySelectorAll('.layout-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const mode = btn.dataset.layout;
+      if (mode === layoutMode) return;
+      layoutMode = mode;
+      document.querySelectorAll('.layout-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      rebuildSimulation();
+    });
+  });
+}
+
+/* ================================================================
    DETAIL PANEL (Details tab)
    ================================================================ */
 function renderEmptyDetail() {
@@ -793,11 +1061,13 @@ function renderNodeDetail(nd) {
 
   const conns       = DATA.edges.filter(e => e.source_id === nd.id || e.target_id === nd.id);
   const statusColor = STATUS_COLORS[nd.status] || '#a0aec0';
+  const typeColor   = TYPE_COLORS[nd.type] || '#6b7280';
 
   let h = '<div class="node-detail">';
   h += '<h2><span class="status-indicator" style="background:' + statusColor + '"></span>'
      + esc(nd.name) + '</h2>';
-  h += '<span class="node-type-badge">' + esc(nd.type) + '</span>';
+  h += '<span class="node-type-badge" style="background:' + typeColor + '20;color:' + typeColor + '">'
+     + esc(nd.type) + '</span>';
 
   if (nd.description) {
     h += '<div class="field-label">Description</div>';
@@ -851,7 +1121,6 @@ function renderNodeDetail(nd) {
 
   document.getElementById('tab-details').innerHTML = h;
 
-  // Switch to Details tab automatically
   document.querySelectorAll('.tab-btn').forEach(b  => b.classList.remove('active'));
   document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
   document.querySelector('.tab-btn[data-tab="details"]').classList.add('active');
@@ -921,7 +1190,6 @@ function renderQuestions() {
 
   document.getElementById('tab-questions').innerHTML = h;
 
-  // Click a question card to highlight its nodes on the graph
   document.querySelectorAll('.question-card').forEach(card => {
     card.addEventListener('click', () => {
       const ids = JSON.parse(card.dataset.highlight || '[]');
@@ -931,13 +1199,98 @@ function renderQuestions() {
 }
 
 /* ================================================================
+   HELPER: compute node size with degree bonus
+   ================================================================ */
+function getNodeSize(node, degree) {
+  const base = NODE_SIZES[node.type] || [140, 40];
+  const bonus = 1 + Math.min(degree / 20, 0.2);
+  return [Math.round(base[0] * bonus), Math.round(base[1] * bonus)];
+}
+
+/* ================================================================
+   HELPER: compute depth map for parent-child hierarchy
+   ================================================================ */
+function computeDepths(nodeData, childrenOf) {
+  const depth = {};
+  nodeData.forEach(n => { if (!n.parent_id) depth[n.id] = 0; });
+  let changed = true;
+  while (changed) {
+    changed = false;
+    nodeData.forEach(n => {
+      if (n.parent_id && depth[n.parent_id] !== undefined && depth[n.id] === undefined) {
+        depth[n.id] = depth[n.parent_id] + 1;
+        changed = true;
+      }
+    });
+  }
+  nodeData.forEach(n => { if (depth[n.id] === undefined) depth[n.id] = 0; });
+  return depth;
+}
+
+/* ================================================================
+   HELPER: get all descendants of a node
+   ================================================================ */
+function getAllDescendants(parentId) {
+  const result = [];
+  const stack = [...(gChildrenOf[parentId] || [])];
+  while (stack.length) {
+    const id = stack.pop();
+    result.push(id);
+    if (gChildrenOf[id]) stack.push(...gChildrenOf[id]);
+  }
+  return result;
+}
+
+/* ================================================================
    D3 FORCE-DIRECTED GRAPH
    ================================================================ */
 function buildGraph() {
   svgEl = d3.select('#graph-svg');
   const container = document.getElementById('canvas-panel');
-  const W = container.clientWidth;
-  const H = container.clientHeight;
+  gW = container.clientWidth;
+  gH = container.clientHeight;
+
+  /* ---- Compute degree per node ---- */
+  const degreeMap = {};
+  DATA.nodes.forEach(n => degreeMap[n.id] = 0);
+  DATA.edges.forEach(e => {
+    if (degreeMap[e.source_id] !== undefined) degreeMap[e.source_id]++;
+    if (degreeMap[e.target_id] !== undefined) degreeMap[e.target_id]++;
+  });
+
+  /* ---- Prepare node data ---- */
+  gNodeData = DATA.nodes.map(n => {
+    const [w, h] = getNodeSize(n, degreeMap[n.id] || 0);
+    return {
+      ...n,
+      x: gW / 2 + (Math.random() - 0.5) * gW * 0.6,
+      y: gH / 2 + (Math.random() - 0.5) * gH * 0.6,
+      w: w, h: h
+    };
+  });
+  gNodeMap = {};
+  gNodeData.forEach(n => gNodeMap[n.id] = n);
+
+  /* ---- Prepare edge data ---- */
+  gEdgeData = DATA.edges
+    .filter(e => gNodeMap[e.source_id] && gNodeMap[e.target_id])
+    .map(e => ({ ...e, source: e.source_id, target: e.target_id }));
+
+  /* ---- Identify parent/child grouping ---- */
+  gParentIds  = new Set(gNodeData.filter(n => n.parent_id).map(n => n.parent_id));
+  gChildrenOf = {};
+  gNodeData.forEach(n => {
+    if (n.parent_id) {
+      if (!gChildrenOf[n.parent_id]) gChildrenOf[n.parent_id] = [];
+      gChildrenOf[n.parent_id].push(n.id);
+    }
+  });
+
+  /* ---- Compute depths & auto-collapse depth > 2 ---- */
+  gDepthMap = computeDepths(gNodeData, gChildrenOf);
+  Object.keys(gChildrenOf).forEach(pid => {
+    if ((gDepthMap[pid] || 0) >= 2) collapsedGroups.add(pid);
+  });
 
   /* ---- Arrow markers ---- */
   const defs = svgEl.append('defs');
@@ -950,7 +1303,7 @@ function buildGraph() {
       .attr('orient', 'auto')
       .append('path')
         .attr('d', 'M0,-4L8,0L0,4')
-        .attr('fill', color).attr('opacity', 0.6);
+        .attr('fill', color).attr('opacity', 0.4);
   });
 
   /* ---- Zoom ---- */
@@ -972,146 +1325,124 @@ function buildGraph() {
   /* Transparent background rect for click target */
   svgEl.append('rect')
     .attr('class', 'bg-rect')
-    .attr('width', W).attr('height', H)
+    .attr('width', gW).attr('height', gH)
     .attr('fill', 'transparent');
 
   mainG = svgEl.append('g').attr('class', 'main-group');
 
-  /* ---- Prepare node data ---- */
-  const nodeData = DATA.nodes.map((n, i) => ({
-    ...n,
-    x: W / 2 + (Math.random() - 0.5) * W * 0.6,
-    y: H / 2 + (Math.random() - 0.5) * H * 0.6,
-    w: NODE_WIDTH,
-    h: NODE_HEIGHT
-  }));
-  const nodeMap = {};
-  nodeData.forEach(n => nodeMap[n.id] = n);
-
-  /* ---- Prepare edge data ---- */
-  const edgeData = DATA.edges
-    .filter(e => nodeMap[e.source_id] && nodeMap[e.target_id])
-    .map(e => ({ ...e, source: e.source_id, target: e.target_id }));
-
-  /* ---- Identify parent/child grouping ---- */
-  const parentIds  = new Set(nodeData.filter(n => n.parent_id).map(n => n.parent_id));
-  const childrenOf = {};
-  nodeData.forEach(n => {
-    if (n.parent_id) {
-      if (!childrenOf[n.parent_id]) childrenOf[n.parent_id] = [];
-      childrenOf[n.parent_id].push(n.id);
-    }
-  });
-
   /* ---- Layers (draw order: groups, edges, nodes) ---- */
-  const groupG = mainG.append('g').attr('class', 'groups-layer');
+  gGroupG = mainG.append('g').attr('class', 'groups-layer');
   const edgeG  = mainG.append('g').attr('class', 'edges-layer');
   const nodeG  = mainG.append('g').attr('class', 'nodes-layer');
 
   /* ---- Draw edges ---- */
-  const edgeGroups = edgeG.selectAll('.edge-group')
-    .data(edgeData).join('g')
+  gEdgeGroups = edgeG.selectAll('.edge-group')
+    .data(gEdgeData).join('g')
     .attr('class', d => 'edge-group' + (d.status === 'planned' ? ' planned' : ''));
 
-  edgeGroups.append('path')
+  gEdgeGroups.append('path')
     .attr('class', d => 'edge-line' + (d.status === 'planned' ? ' planned' : ''))
     .attr('stroke', d => EDGE_COLORS[d.relationship] || '#a0aec0')
     .attr('marker-end', d => 'url(#arrow-' + d.relationship + ')');
 
-  edgeGroups.append('text')
+  gEdgeGroups.append('text')
     .attr('class', 'edge-label')
     .attr('text-anchor', 'middle').attr('dy', -6)
     .text(d => d.label || d.relationship);
 
   /* ---- Draw nodes ---- */
-  const nodeGroups = nodeG.selectAll('.node-group')
-    .data(nodeData).join('g')
-    .attr('class', 'node-group')
+  gNodeGroups = nodeG.selectAll('.node-group')
+    .data(gNodeData).join('g')
+    .attr('class', d => 'node-group')
     .attr('id', d => 'node-' + d.id)
     .on('click', (event, d) => { event.stopPropagation(); selectNode(d); })
+    .on('contextmenu', (event, d) => showContextMenu(event, d))
+    .on('dblclick', (event, d) => {
+      event.stopPropagation();
+      if (gChildrenOf[d.id]) toggleCollapse(d.id);
+    })
     .call(d3.drag()
       .on('start', dragStarted)
       .on('drag',  dragged)
       .on('end',   dragEnded));
 
-  /* background rect */
-  nodeGroups.append('rect')
+  /* Background rect */
+  gNodeGroups.append('rect')
     .attr('class', 'node-rect')
-    .attr('width', NODE_WIDTH).attr('height', NODE_HEIGHT)
+    .attr('width', d => d.w).attr('height', d => d.h)
     .attr('fill', 'var(--node-bg)')
-    .attr('stroke', 'var(--node-border)');
+    .attr('stroke', d => d.status === 'broken' ? '#e53e3e' : 'var(--node-border)')
+    .attr('stroke-width', d => d.status === 'broken' ? 2 : 1.5)
+    .attr('stroke-dasharray', d => d.status === 'planned' ? '6 3' : null);
 
-  /* status left bar */
-  nodeGroups.append('rect')
-    .attr('class', 'node-status-bar')
-    .attr('width', 4).attr('height', NODE_HEIGHT)
-    .attr('fill', d => STATUS_COLORS[d.status] || '#a0aec0');
+  /* Type color tint overlay */
+  gNodeGroups.append('rect')
+    .attr('width', d => d.w).attr('height', d => d.h)
+    .attr('rx', 8).attr('ry', 8)
+    .attr('fill', d => d.status === 'deprecated' ? '#9ca3af' : (TYPE_COLORS[d.type] || '#6b7280'))
+    .attr('fill-opacity', d => d.status === 'planned' ? 0.04 : 0.08)
+    .attr('pointer-events', 'none');
 
-  /* type badge pill */
-  nodeGroups.append('rect')
-    .attr('x', d => NODE_WIDTH - (d.type.length * 7 + 20))
-    .attr('y', 8)
-    .attr('width', d => d.type.length * 7 + 12)
-    .attr('height', 18).attr('rx', 9)
-    .attr('fill', 'var(--badge-bg)');
+  /* Left color bar */
+  gNodeGroups.append('rect')
+    .attr('class', d => 'node-status-bar' + (d.status === 'in_progress' ? ' status-bar-in_progress' : ''))
+    .attr('width', 4).attr('height', d => d.h)
+    .attr('rx', 2)
+    .attr('fill', d => TYPE_COLORS[d.type] || '#6b7280');
 
-  nodeGroups.append('text')
+  /* Type badge pill */
+  gNodeGroups.append('rect')
+    .attr('x', d => d.w - (d.type.length * 6 + 18))
+    .attr('y', 6)
+    .attr('width', d => d.type.length * 6 + 12)
+    .attr('height', 16).attr('rx', 8)
+    .attr('fill', d => TYPE_COLORS[d.type] || '#6b7280')
+    .attr('fill-opacity', 0.15);
+
+  gNodeGroups.append('text')
     .attr('class', 'node-type-label')
-    .attr('x', NODE_WIDTH - 14).attr('y', 21)
+    .attr('x', d => d.w - 10).attr('y', 18)
     .attr('text-anchor', 'end')
-    .attr('fill', 'var(--badge-text)')
+    .attr('fill', d => TYPE_COLORS[d.type] || '#6b7280')
     .text(d => d.type);
 
-  /* name */
-  nodeGroups.append('text')
+  /* Name */
+  gNodeGroups.append('text')
     .attr('class', 'node-name')
-    .attr('x', 14).attr('y', 28)
-    .text(d => trunc(d.name, 28));
+    .attr('x', 12).attr('y', d => d.h <= 36 ? d.h / 2 + 4 : 24)
+    .attr('font-size', d => d.h <= 36 ? '12px' : '14px')
+    .text(d => trunc(d.name, Math.floor((d.w - 70) / 8)));
 
-  /* description */
-  nodeGroups.append('text')
+  /* Description (only for h >= 48) */
+  gNodeGroups.filter(d => d.h >= 48).append('text')
     .attr('class', 'node-desc')
-    .attr('x', 14).attr('y', 48)
-    .text(d => d.description ? trunc(d.description, 38) : '');
+    .attr('x', 12).attr('y', 42)
+    .text(d => d.description ? trunc(d.description, Math.floor((d.w - 20) / 7)) : '');
 
-  /* source file */
-  nodeGroups.append('text')
+  /* Source file (only for h >= 56) */
+  gNodeGroups.filter(d => d.h >= 56).append('text')
     .attr('class', 'node-source')
-    .attr('x', 14).attr('y', 68)
-    .text(d => d.source_file ? trunc(d.source_file, 36) : '');
+    .attr('x', 12).attr('y', d => d.h - 8)
+    .text(d => d.source_file ? trunc(d.source_file, Math.floor((d.w - 20) / 6)) : '');
 
-  /* ---- Force simulation ---- */
-  simulation = d3.forceSimulation(nodeData)
-    .force('link',      d3.forceLink(edgeData).id(d => d.id).distance(220).strength(0.4))
-    .force('charge',    d3.forceManyBody().strength(-800).distanceMax(600))
-    .force('center',    d3.forceCenter(W / 2, H / 2).strength(0.05))
-    .force('collision', d3.forceCollide().radius(Math.max(NODE_WIDTH, NODE_HEIGHT) / 2 + 30).strength(0.8))
-    .force('x',         d3.forceX(W / 2).strength(0.02))
-    .force('y',         d3.forceY(H / 2).strength(0.02))
-    .alphaDecay(0.02)
-    .on('tick', () => {
-      nodeGroups.attr('transform', d =>
-        'translate(' + (d.x - NODE_WIDTH / 2) + ',' + (d.y - NODE_HEIGHT / 2) + ')');
-
-      edgeGroups.select('path').attr('d', d => {
-        const sx = d.source.x, sy = d.source.y;
-        const tx = d.target.x, ty = d.target.y;
-        const dx = tx - sx, dy = ty - sy;
-        const dr = Math.sqrt(dx * dx + dy * dy) * 0.7;
-        return 'M' + sx + ',' + sy + 'A' + dr + ',' + dr + ' 0 0,1 ' + tx + ',' + ty;
-      });
-
-      edgeGroups.select('text')
-        .attr('x', d => (d.source.x + d.target.x) / 2)
-        .attr('y', d => (d.source.y + d.target.y) / 2);
-
-      updateGroupBGs(groupG, nodeData, childrenOf, parentIds);
+  /* Apply status opacity */
+  gNodeGroups
+    .style('opacity', d => {
+      if (d.status === 'planned') return 0.45;
+      if (d.status === 'deprecated') return 0.5;
+      return null;
     })
-    .on('end', () => { zoomToFit(); updateMinimap(); });
+    .style('filter', d => d.status === 'deprecated' ? 'grayscale(0.8)' : null);
+
+  /* ---- Build simulation ---- */
+  rebuildSimulation();
+
+  /* ---- Apply auto-collapse ---- */
+  applyCollapse();
 
   /* Initial fit */
   setTimeout(() => { zoomToFit(); updateMinimap(); }, 300);
-  initMinimap(W, H);
+  initMinimap(gW, gH);
 
   /* Zoom buttons */
   document.getElementById('zoom-in').addEventListener('click',  () => svgEl.transition().duration(300).call(zoom.scaleBy, 1.3));
@@ -1120,41 +1451,179 @@ function buildGraph() {
 }
 
 /* ================================================================
+   SIMULATION BUILDER
+   ================================================================ */
+function clusterForce() {
+  let nodes;
+  function force(alpha) {
+    nodes.forEach(d => {
+      if (d.parent_id && gNodeMap[d.parent_id]) {
+        const parent = gNodeMap[d.parent_id];
+        d.vx += (parent.x - d.x) * alpha * 0.5;
+        d.vy += (parent.y - d.y) * alpha * 0.5;
+      }
+    });
+  }
+  force.initialize = function(_) { nodes = _; };
+  return force;
+}
+
+function rebuildSimulation() {
+  if (simulation) simulation.stop();
+
+  simulation = d3.forceSimulation(gNodeData)
+    .force('link', d3.forceLink(gEdgeData).id(d => d.id).distance(220).strength(0.4))
+    .force('collision', d3.forceCollide().radius(d => Math.max(d.w, d.h) / 2 + 20).strength(0.8))
+    .force('x', d3.forceX(gW / 2).strength(0.02))
+    .alphaDecay(0.02);
+
+  if (layoutMode === 'clustered') {
+    simulation
+      .force('charge', d3.forceManyBody().strength(-400).distanceMax(600))
+      .force('center', d3.forceCenter(gW / 2, gH / 2).strength(0.03))
+      .force('tierY', d3.forceY(d => {
+        const tier = TIER_Y[d.type];
+        return (tier !== undefined ? tier : 0.5) * gH;
+      }).strength(0.3))
+      .force('cluster', clusterForce());
+  } else {
+    simulation
+      .force('charge', d3.forceManyBody().strength(-800).distanceMax(600))
+      .force('center', d3.forceCenter(gW / 2, gH / 2).strength(0.05))
+      .force('tierY', d3.forceY(gH / 2).strength(0.02));
+  }
+
+  simulation
+    .on('tick', onTick)
+    .on('end', () => { zoomToFit(); updateMinimap(); });
+
+  simulation.alpha(1).restart();
+}
+
+function onTick() {
+  gNodeGroups.attr('transform', d =>
+    'translate(' + (d.x - d.w / 2) + ',' + (d.y - d.h / 2) + ')');
+
+  gEdgeGroups.select('path').attr('d', d => {
+    const sx = d.source.x, sy = d.source.y;
+    const tx = d.target.x, ty = d.target.y;
+    const dx = tx - sx, dy = ty - sy;
+    const dr = Math.sqrt(dx * dx + dy * dy) * 0.7;
+    return 'M' + sx + ',' + sy + 'A' + dr + ',' + dr + ' 0 0,1 ' + tx + ',' + ty;
+  });
+
+  gEdgeGroups.select('text')
+    .attr('x', d => (d.source.x + d.target.x) / 2)
+    .attr('y', d => (d.source.y + d.target.y) / 2);
+
+  updateGroupBGs();
+}
+
+/* ================================================================
    GROUP BACKGROUNDS (parent nodes)
    ================================================================ */
-function updateGroupBGs(groupG, nodeData, childrenOf, parentIds) {
+function updateGroupBGs() {
   const groups = [];
-  parentIds.forEach(pid => {
-    const parent   = nodeData.find(n => n.id === pid);
+  gParentIds.forEach(pid => {
+    if (collapsedGroups.has(pid)) return;
+    const parent = gNodeData.find(n => n.id === pid);
     if (!parent) return;
-    const children = (childrenOf[pid] || [])
-      .map(cid => nodeData.find(n => n.id === cid)).filter(Boolean);
+    const children = (gChildrenOf[pid] || [])
+      .map(cid => gNodeData.find(n => n.id === cid)).filter(Boolean)
+      .filter(n => !hiddenNodes.has(n.id));
     if (children.length === 0) return;
     const all = [parent, ...children];
     const pad = 30;
-    const x1  = d3.min(all, n => n.x - NODE_WIDTH / 2)  - pad;
-    const y1  = d3.min(all, n => n.y - NODE_HEIGHT / 2) - pad - 20;
-    const x2  = d3.max(all, n => n.x + NODE_WIDTH / 2)  + pad;
-    const y2  = d3.max(all, n => n.y + NODE_HEIGHT / 2) + pad;
+    const x1  = d3.min(all, n => n.x - n.w / 2)  - pad;
+    const y1  = d3.min(all, n => n.y - n.h / 2) - pad - 18;
+    const x2  = d3.max(all, n => n.x + n.w / 2)  + pad;
+    const y2  = d3.max(all, n => n.y + n.h / 2) + pad;
+    const typeColor = TYPE_COLORS[parent.type] || '#6b7280';
     groups.push({ id: pid, name: parent.name, x: x1, y: y1,
-                  w: x2 - x1, h: y2 - y1, count: children.length, status: parent.status });
+                  w: x2 - x1, h: y2 - y1, count: children.length,
+                  typeColor: typeColor });
   });
 
-  const sel     = groupG.selectAll('.group-container').data(groups, d => d.id);
+  /* Also add collapsed group pills */
+  const pills = [];
+  collapsedGroups.forEach(pid => {
+    const parent = gNodeData.find(n => n.id === pid);
+    if (!parent) return;
+    const childCount = getAllDescendants(pid).length;
+    if (childCount === 0) return;
+    const typeColor = TYPE_COLORS[parent.type] || '#6b7280';
+    pills.push({ id: pid + '-pill', parentId: pid, name: parent.name,
+                 x: parent.x, y: parent.y + parent.h / 2 + 16,
+                 count: childCount, typeColor: typeColor });
+  });
+
+  /* Render expanded group boxes */
+  const sel = gGroupG.selectAll('.group-container').data(groups, d => d.id);
   const entered = sel.enter().append('g').attr('class', 'group-container');
   entered.append('rect').attr('class', 'group-bg');
   entered.append('text').attr('class', 'group-label');
+  entered.select('.group-bg').on('dblclick', (event, d) => {
+    event.stopPropagation();
+    toggleCollapse(d.id);
+  });
   const merged = entered.merge(sel);
   merged.select('.group-bg')
     .attr('x', d => d.x).attr('y', d => d.y)
     .attr('width', d => d.w).attr('height', d => d.h)
-    .attr('fill',   d => STATUS_COLORS[d.status] || '#a0aec0')
-    .attr('stroke', d => STATUS_COLORS[d.status] || '#a0aec0')
-    .attr('stroke-width', 1);
+    .attr('fill', d => d.typeColor)
+    .attr('fill-opacity', 0.04)
+    .attr('stroke', d => d.typeColor)
+    .attr('stroke-opacity', 0.15)
+    .attr('stroke-width', 1.5);
   merged.select('.group-label')
-    .attr('x', d => d.x + 12).attr('y', d => d.y + 16)
+    .attr('x', d => d.x + 12).attr('y', d => d.y + 14)
     .text(d => d.name + ' (' + d.count + ')');
   sel.exit().remove();
+
+  /* Render collapsed pills */
+  const pillSel = gGroupG.selectAll('.collapsed-pill').data(pills, d => d.id);
+  const pillEntered = pillSel.enter().append('g').attr('class', 'collapsed-pill')
+    .on('dblclick', (event, d) => { event.stopPropagation(); toggleCollapse(d.parentId); });
+  pillEntered.append('rect');
+  pillEntered.append('text');
+  const pillMerged = pillEntered.merge(pillSel);
+  pillMerged.select('rect')
+    .attr('x', d => d.x - 50).attr('y', d => d.y - 10)
+    .attr('width', 100).attr('height', 20)
+    .attr('fill', d => d.typeColor).attr('fill-opacity', 0.1)
+    .attr('stroke', d => d.typeColor).attr('stroke-opacity', 0.3);
+  pillMerged.select('text')
+    .attr('x', d => d.x).attr('y', d => d.y + 4)
+    .attr('text-anchor', 'middle')
+    .attr('font-size', '10px')
+    .text(d => d.count + ' hidden');
+  pillSel.exit().remove();
+}
+
+/* ================================================================
+   COLLAPSE / EXPAND
+   ================================================================ */
+function toggleCollapse(parentId) {
+  if (collapsedGroups.has(parentId)) collapsedGroups.delete(parentId);
+  else collapsedGroups.add(parentId);
+  applyCollapse();
+}
+
+function applyCollapse() {
+  hiddenNodes = new Set();
+  collapsedGroups.forEach(pid => {
+    getAllDescendants(pid).forEach(cid => hiddenNodes.add(cid));
+  });
+
+  d3.selectAll('.node-group').each(function(d) {
+    d3.select(this).style('display', hiddenNodes.has(d.id) ? 'none' : null);
+  });
+  d3.selectAll('.edge-group').each(function(d) {
+    const s = d.source.id || d.source;
+    const t = d.target.id || d.target;
+    d3.select(this).style('display', (hiddenNodes.has(s) || hiddenNodes.has(t)) ? 'none' : null);
+  });
+  updateMinimap();
 }
 
 /* ================================================================
@@ -1171,14 +1640,14 @@ function updateMinimap() {
   if (!mainG) return;
   const mm  = d3.select('#minimap-svg');
   const mmW = 200, mmH = 150;
-  const nodes = d3.selectAll('.node-group').data();
+  const nodes = d3.selectAll('.node-group').data().filter(n => !hiddenNodes.has(n.id));
   if (nodes.length === 0) return;
 
   const pad = 50;
-  const x1 = d3.min(nodes, d => d.x - NODE_WIDTH / 2) - pad;
-  const y1 = d3.min(nodes, d => d.y - NODE_HEIGHT / 2) - pad;
-  const x2 = d3.max(nodes, d => d.x + NODE_WIDTH / 2) + pad;
-  const y2 = d3.max(nodes, d => d.y + NODE_HEIGHT / 2) + pad;
+  const x1 = d3.min(nodes, d => d.x - d.w / 2) - pad;
+  const y1 = d3.min(nodes, d => d.y - d.h / 2) - pad;
+  const x2 = d3.max(nodes, d => d.x + d.w / 2) + pad;
+  const y2 = d3.max(nodes, d => d.y + d.h / 2) + pad;
   const bw = x2 - x1, bh = y2 - y1;
   const sc = Math.min(mmW / bw, mmH / bh);
 
@@ -1199,16 +1668,16 @@ function updateMinimap() {
     .attr('y1', d => { const n = nodes.find(n => n.id === d.source_id); return n ? n.y : 0; })
     .attr('x2', d => { const n = nodes.find(n => n.id === d.target_id); return n ? n.x : 0; })
     .attr('y2', d => { const n = nodes.find(n => n.id === d.target_id); return n ? n.y : 0; })
-    .attr('stroke', '#a0aec0').attr('stroke-width', 1).attr('opacity', 0.3);
+    .attr('stroke', '#a0aec0').attr('stroke-width', 1).attr('opacity', 0.2);
 
-  /* minimap nodes */
+  /* minimap nodes -- colored by type */
   g.selectAll('.mm-node')
     .data(nodes).join('rect').attr('class', 'mm-node')
-    .attr('x', d => d.x - NODE_WIDTH / 2).attr('y', d => d.y - NODE_HEIGHT / 2)
-    .attr('width', NODE_WIDTH).attr('height', NODE_HEIGHT)
-    .attr('rx', 4)
-    .attr('fill', d => STATUS_COLORS[d.status] || '#a0aec0')
-    .attr('opacity', 0.6);
+    .attr('x', d => d.x - d.w / 2).attr('y', d => d.y - d.h / 2)
+    .attr('width', d => d.w).attr('height', d => d.h)
+    .attr('rx', 3)
+    .attr('fill', d => TYPE_COLORS[d.type] || '#6b7280')
+    .attr('opacity', 0.7);
 
   /* viewport rect */
   const ctr       = document.getElementById('canvas-panel');
@@ -1234,14 +1703,14 @@ function zoomToFit() {
   const ctr   = document.getElementById('canvas-panel');
   const W     = ctr.clientWidth;
   const H     = ctr.clientHeight;
-  const nodes = d3.selectAll('.node-group').data();
+  const nodes = d3.selectAll('.node-group').data().filter(n => !hiddenNodes.has(n.id));
   if (nodes.length === 0) return;
 
   const pad = 60;
-  const x1 = d3.min(nodes, d => d.x - NODE_WIDTH / 2) - pad;
-  const y1 = d3.min(nodes, d => d.y - NODE_HEIGHT / 2) - pad;
-  const x2 = d3.max(nodes, d => d.x + NODE_WIDTH / 2) + pad;
-  const y2 = d3.max(nodes, d => d.y + NODE_HEIGHT / 2) + pad;
+  const x1 = d3.min(nodes, d => d.x - d.w / 2) - pad;
+  const y1 = d3.min(nodes, d => d.y - d.h / 2) - pad;
+  const x2 = d3.max(nodes, d => d.x + d.w / 2) + pad;
+  const y2 = d3.max(nodes, d => d.y + d.h / 2) + pad;
   const bw = x2 - x1, bh = y2 - y1;
   const sc = Math.min(W / bw, H / bh, 1.5);
   const tx = (W - bw * sc) / 2 - x1 * sc;
@@ -1292,10 +1761,10 @@ function highlightNodes(nodeIds) {
   if (nodes.length === 0) return;
   const ctr = document.getElementById('canvas-panel');
   const W   = ctr.clientWidth, H = ctr.clientHeight, pad = 100;
-  const x1  = d3.min(nodes, d => d.x - NODE_WIDTH / 2) - pad;
-  const y1  = d3.min(nodes, d => d.y - NODE_HEIGHT / 2) - pad;
-  const x2  = d3.max(nodes, d => d.x + NODE_WIDTH / 2) + pad;
-  const y2  = d3.max(nodes, d => d.y + NODE_HEIGHT / 2) + pad;
+  const x1  = d3.min(nodes, d => d.x - d.w / 2) - pad;
+  const y1  = d3.min(nodes, d => d.y - d.h / 2) - pad;
+  const x2  = d3.max(nodes, d => d.x + d.w / 2) + pad;
+  const y2  = d3.max(nodes, d => d.y + d.h / 2) + pad;
   const bw  = x2 - x1, bh = y2 - y1;
   const sc  = Math.min(W / bw, H / bh, 1.5);
   const tx  = (W - bw * sc) / 2 - x1 * sc;
