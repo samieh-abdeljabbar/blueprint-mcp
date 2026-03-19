@@ -6,6 +6,11 @@ import json
 from datetime import datetime, timezone
 
 from src.db import Database
+from src.models import (
+    EDGE_RELATIONSHIP_DESCRIPTIONS,
+    NODE_STATUS_DESCRIPTIONS,
+    NODE_TYPE_DESCRIPTIONS,
+)
 
 
 async def render_blueprint(
@@ -57,6 +62,9 @@ async def _build_data_json(db: Database) -> tuple[str, dict]:
         "issues": [i.model_dump() for i in issues],
         "questions": questions_result["questions"],
         "questions_summary": questions_result["summary"],
+        "node_type_descriptions": NODE_TYPE_DESCRIPTIONS,
+        "node_status_descriptions": NODE_STATUS_DESCRIPTIONS,
+        "edge_relationship_descriptions": EDGE_RELATIONSHIP_DESCRIPTIONS,
     }
 
     counts = {
@@ -849,27 +857,9 @@ const EDGE_DASH = {
   reads_from: '12 4', writes_to: '12 4', updates: '12 4'
 };
 
-const RELATIONSHIP_HELP = {
-  connects_to:   'General connection between components',
-  reads_from:    'Reads data from this source (database, cache, file)',
-  writes_to:     'Writes or persists data to this target',
-  depends_on:    'Requires this to function \u2014 cannot work without it',
-  authenticates: 'Handles auth verification through this service',
-  calls:         'Directly invokes functions or methods on this target',
-  inherits:      'Extends or subclasses this component',
-  contains:      'Parent-child: this is nested inside or owned by',
-  exposes:       'Makes functionality available externally (API, endpoint)',
-  observes:      'Watches for changes or events from this source',
-  creates:       'Instantiates or constructs instances of this target',
-  produces:      'Generates output consumed by downstream components',
-  consumes:      'Receives and processes input from this source',
-  delegates:     'Forwards responsibility to this target to handle',
-  controls:      'Manages lifecycle or behavior of this target',
-  uses:          'Utilizes functionality from this target as a dependency',
-  updates:       'Modifies state or data in this target',
-  implements:    'Provides the concrete implementation of this interface',
-  emits:         'Sends events or signals that others can listen to'
-};
+const RELATIONSHIP_HELP = DATA.edge_relationship_descriptions || {};
+const NODE_TYPE_HELP = DATA.node_type_descriptions || {};
+const NODE_STATUS_HELP = DATA.node_status_descriptions || {};
 
 /* ----------------------------------------------------------------
    Mutable state
@@ -1155,8 +1145,12 @@ function renderNodeDetail(nd) {
 
   h += '<h2><span class="status-indicator" style="background:' + statusColor + '"></span>'
      + esc(nd.name) + '</h2>';
-  h += '<span class="node-type-badge" style="background:' + typeColor + '20;color:' + typeColor + '">'
-     + esc(nd.type) + '</span>';
+  h += '<span class="node-type-badge" style="background:' + typeColor + '20;color:' + typeColor + '"'
+     + (NODE_TYPE_HELP[nd.type] ? ' title="' + esc(NODE_TYPE_HELP[nd.type]) + '"' : '')
+     + '>' + esc(nd.type) + '</span>';
+  if (NODE_TYPE_HELP[nd.type]) {
+    h += '<div class="field-value" style="font-size:12px;margin-bottom:8px;color:var(--text-secondary)">' + esc(NODE_TYPE_HELP[nd.type]) + '</div>';
+  }
 
   if (nd.description) {
     h += '<div class="field-label">Description</div>';
@@ -1166,6 +1160,9 @@ function renderNodeDetail(nd) {
   h += '<div class="field-label">Status</div>';
   h += '<div class="field-value" style="text-transform:capitalize">'
      + esc(nd.status.replace('_', ' ')) + '</div>';
+  if (NODE_STATUS_HELP[nd.status]) {
+    h += '<div class="field-value" style="font-size:11px;color:var(--text-muted)">' + esc(NODE_STATUS_HELP[nd.status]) + '</div>';
+  }
 
   if (nd.source_file) {
     h += '<div class="field-label">Source</div>';
@@ -1609,6 +1606,7 @@ function buildGraph() {
   /* SVG title tooltip */
   gNodeGroups.append('title')
     .text(d => d.name + ' (' + d.type + ', ' + d.status + ')'
+      + (NODE_TYPE_HELP[d.type] ? '\n' + NODE_TYPE_HELP[d.type] : '')
       + (d.description ? '\n' + d.description : ''));
 
   /* Description (only for h >= 48) */

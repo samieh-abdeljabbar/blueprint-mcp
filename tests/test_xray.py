@@ -1,15 +1,20 @@
 """Tests for Phase D — X-ray HTML visualization."""
 
+import json
+
 import pytest
 
 from src.db import Database
 from src.models import (
+    EDGE_RELATIONSHIP_DESCRIPTIONS,
+    NODE_STATUS_DESCRIPTIONS,
+    NODE_TYPE_DESCRIPTIONS,
     EdgeCreateInput,
     EdgeRelationship,
     NodeCreateInput,
     NodeType,
 )
-from src.xray import render_blueprint
+from src.xray import _build_data_json, render_blueprint
 
 
 @pytest.fixture
@@ -71,3 +76,13 @@ async def test_theme_affects_output(db: Database, tmp_path):
     assert result["theme"] == "dark"
     # Dark theme is set via data-theme attribute and uses dark CSS variables
     assert 'data-theme="dark"' in html
+
+
+async def test_data_json_includes_descriptions(db: Database):
+    """_build_data_json output includes all 3 description dicts with correct counts."""
+    await db.create_node(NodeCreateInput(name="Svc", type=NodeType.service))
+    data_str, _ = await _build_data_json(db)
+    data = json.loads(data_str)
+    assert data["node_type_descriptions"] == NODE_TYPE_DESCRIPTIONS
+    assert data["node_status_descriptions"] == NODE_STATUS_DESCRIPTIONS
+    assert data["edge_relationship_descriptions"] == EDGE_RELATIONSHIP_DESCRIPTIONS

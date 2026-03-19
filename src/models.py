@@ -76,6 +76,72 @@ class EdgeStatus(str, Enum):
     planned = "planned"
 
 
+# --- Description dictionaries ---
+
+NODE_TYPE_DESCRIPTIONS: dict[str, str] = {
+    "system": "Top-level container representing the entire application or project",
+    "service": "A running process or microservice that handles business logic",
+    "database": "Persistent data store such as PostgreSQL, MySQL, or MongoDB",
+    "table": "A structured collection of rows within a database",
+    "column": "A single field or attribute within a database table",
+    "api": "An interface exposing functionality over HTTP or another protocol",
+    "route": "A specific URL path mapped to a handler within an API",
+    "function": "A callable unit of logic that performs a single task",
+    "module": "A file or package grouping related code together",
+    "container": "A deployment unit such as a Docker container or pod",
+    "queue": "An async message buffer decoupling producers from consumers",
+    "cache": "A fast-access temporary store for frequently read data",
+    "external": "A third-party system or service outside your control",
+    "config": "Configuration file or environment settings",
+    "file": "A general-purpose source or data file in the project",
+    "submodule": "A nested repository or vendored dependency",
+    "class_def": "An object-oriented class definition with methods and state",
+    "struct": "A lightweight value type grouping related fields together",
+    "protocol": "An interface or trait defining a contract for implementors",
+    "view": "A UI component or template that renders visible output",
+    "test": "An automated test verifying correctness of other components",
+    "script": "A standalone executable file for tasks like migrations or CLI",
+    "middleware": "Request processing layer that intercepts calls before handlers",
+    "migration": "A versioned database schema change applied in sequence",
+    "webhook": "An HTTP callback triggered by an external event",
+    "worker": "A background process consuming tasks from a queue",
+    "model": "A data structure representing a domain entity or DTO",
+    "schema": "A formal definition of data shape used for validation",
+    "enum_def": "A fixed set of named constants for type-safe value selection",
+    "util": "A shared helper module providing common utility functions",
+}
+
+NODE_STATUS_DESCRIPTIONS: dict[str, str] = {
+    "planned": "Designed but not yet implemented",
+    "in_progress": "Currently being built or modified",
+    "built": "Fully implemented and operational",
+    "broken": "Exists but is failing or non-functional",
+    "deprecated": "Scheduled for removal — avoid new dependencies",
+}
+
+EDGE_RELATIONSHIP_DESCRIPTIONS: dict[str, str] = {
+    "connects_to": "General connection between components",
+    "reads_from": "Reads data from this source (database, cache, file)",
+    "writes_to": "Writes or persists data to this target",
+    "depends_on": "Requires this to function -- cannot work without it",
+    "authenticates": "Handles auth verification through this service",
+    "calls": "Directly invokes functions or methods on this target",
+    "inherits": "Extends or subclasses this component",
+    "contains": "Parent-child: this is nested inside or owned by",
+    "exposes": "Makes functionality available externally (API, endpoint)",
+    "observes": "Watches for changes or events from this source",
+    "creates": "Instantiates or constructs instances of this target",
+    "produces": "Generates output consumed by downstream components",
+    "consumes": "Receives and processes input from this source",
+    "delegates": "Forwards responsibility to this target to handle",
+    "controls": "Manages lifecycle or behavior of this target",
+    "uses": "Utilizes functionality from this target as a dependency",
+    "updates": "Modifies state or data in this target",
+    "implements": "Provides the concrete implementation of this interface",
+    "emits": "Sends events or signals that others can listen to",
+}
+
+
 # --- Output models ---
 
 
