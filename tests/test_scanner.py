@@ -91,16 +91,19 @@ async def test_file_scanner_respects_gitignore(db: Database):
 
 
 async def test_file_scanner_idempotent(db: Database):
-    """Scanning twice produces same node count."""
+    """Scanning twice produces same node count and preserves node IDs."""
     await scan_project_files(PYTHON_PROJECT, db)
     bp1 = await db.get_blueprint()
     count1 = bp1["summary"]["total_nodes"]
+    ids1 = {n["id"] for n in bp1["nodes"]}
 
     await scan_project_files(PYTHON_PROJECT, db)
     bp2 = await db.get_blueprint()
     count2 = bp2["summary"]["total_nodes"]
+    ids2 = {n["id"] for n in bp2["nodes"]}
 
     assert count1 == count2
+    assert ids1 == ids2  # same node IDs preserved
 
 
 # --- Python Scanner ---
@@ -177,14 +180,14 @@ async def test_python_scanner_detects_import_dependency(db: Database):
     # Find the modules
     nodes = bp["nodes"]
     module_names = {n["id"]: n["name"] for n in nodes if n["type"] == "module"}
-    # Check there's a main.py -> models.py dependency
+    # Check there's a main.py -> models.py dependency with exact name match
     found = False
     for e in depends_on:
         src_name = module_names.get(e["source_id"], "")
         tgt_name = module_names.get(e["target_id"], "")
-        if "main" in src_name and "models" in tgt_name:
+        if src_name == "main.py" and tgt_name == "models.py":
             found = True
-    assert found, f"Expected main.py -> models.py dependency, found edges: {depends_on}"
+    assert found, f"Expected main.py -> models.py dependency, found modules: {module_names}, edges: {depends_on}"
 
 
 async def test_python_scanner_handles_syntax_error(db: Database):
@@ -203,17 +206,23 @@ async def test_python_scanner_handles_syntax_error(db: Database):
 
 
 async def test_python_scanner_idempotent(db: Database):
-    """Scanning twice produces exactly 4 route nodes, not 8."""
+    """Scanning twice produces exactly 4 route nodes with same IDs, not 8."""
     info = await scan_project_files(PYTHON_PROJECT, db)
 
     scanner1 = PythonScanner(db, info.root_id, info.gitignore_spec)
     await scanner1.scan(PYTHON_PROJECT)
 
+    bp1 = await db.get_blueprint(type_filter="route")
+    ids1 = {n["id"] for n in bp1["nodes"]}
+
     scanner2 = PythonScanner(db, info.root_id, info.gitignore_spec)
     await scanner2.scan(PYTHON_PROJECT)
 
-    bp = await db.get_blueprint(type_filter="route")
-    assert len(bp["nodes"]) == 4
+    bp2 = await db.get_blueprint(type_filter="route")
+    ids2 = {n["id"] for n in bp2["nodes"]}
+
+    assert len(bp2["nodes"]) == 4
+    assert ids1 == ids2  # same node IDs preserved
 
 
 # --- JavaScript Scanner ---
@@ -363,7 +372,8 @@ async def test_scan_project_logs_changelog(db: Database):
         "SELECT * FROM changelog WHERE action = 'scan_completed'"
     )
     rows = await cursor.fetchall()
-    assert len(rows) >= 1
+    assert len(rows) == 1
+    assert rows[0]["target_type"] == "project"
 
 
 async def test_scan_docker_project_runs_docker_scanner(db: Database):

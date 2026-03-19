@@ -1,7 +1,6 @@
 """Cost and resource annotations for blueprint nodes."""
 from __future__ import annotations
 
-import json
 from src.db import Database
 
 

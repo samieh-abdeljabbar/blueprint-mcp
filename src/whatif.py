@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import defaultdict, deque
 
 from src.db import Database
-from src.tracer import list_entry_points, trace_flow
+from src.tracer import list_entry_points
 
 
 async def what_if(db: Database, node_id: str, scenario: str) -> dict:

@@ -5,7 +5,7 @@ import sys
 import pytest
 from unittest.mock import patch
 
-from src.cli import main, build_parser
+from src.cli import main
 
 
 def test_init_creates_db(tmp_path):
@@ -39,10 +39,11 @@ def test_health_returns_json(tmp_path):
     original = os.getcwd()
     os.chdir(tmp_path)
     try:
-        with patch("sys.stdout") as mock_out:
-            # Use env var to point to the correct db
+        with patch("builtins.print") as mock_print:
             with patch.dict(os.environ, {"BLUEPRINT_DB": db_path}):
                 main(["health"])
+                output = mock_print.call_args[0][0]
+                assert "overall_score" in output
     finally:
         os.chdir(original)
 

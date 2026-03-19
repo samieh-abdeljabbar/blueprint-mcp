@@ -172,6 +172,11 @@ async def test_circular_dependency_2_nodes(db: Database):
     issues = await analyze(db)
     cycles = [i for i in issues if i.type == "circular_dependency"]
     assert len(cycles) >= 1
+    cycle = cycles[0]
+    assert cycle.severity == IssueSeverity.critical
+    assert len(cycle.node_ids) == 2
+    assert "Alpha" in cycle.message
+    assert "Beta" in cycle.message
 
 
 async def test_dag_no_circular_dependency(db: Database):
@@ -370,6 +375,10 @@ async def test_clean_blueprint_zero_issues(db: Database):
     ))
     issues = await analyze(db, severity=IssueSeverity.critical)
     assert len(issues) == 0
+
+    # Verify analyze() is not trivially returning [] — unfiltered should have warnings
+    all_issues = await analyze(db)
+    assert len(all_issues) > 0, "Expected at least some non-critical issues (e.g. SPOF)"
 
 
 async def test_severity_filter_critical(db: Database):

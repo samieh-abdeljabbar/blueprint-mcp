@@ -6,11 +6,8 @@ from src.db import Database
 from src.models import (
     EdgeCreateInput,
     EdgeRelationship,
-    EdgeStatus,
     NodeCreateInput,
-    NodeStatus,
     NodeType,
-    NodeUpdateInput,
 )
 from src.whatif import what_if
 
@@ -121,4 +118,5 @@ async def test_overload_with_cache(db: Database):
         )
     )
     result = await what_if(db, svc.id, "overload")
-    assert result["resilience_score"] > 0
+    assert result["resilience_score"] == 0.35
+    assert result["protections"] == ["cache"]

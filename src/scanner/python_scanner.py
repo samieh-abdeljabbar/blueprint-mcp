@@ -135,8 +135,6 @@ class PythonScanner(BaseScanner):
         if method_name not in http_methods:
             return None
 
-        # Check the object is an app/router variable
-        app_vars = getattr(self, "_app_var_names", [])
         if isinstance(func.value, ast.Name):
             # Accept any variable as potential app/router
             pass

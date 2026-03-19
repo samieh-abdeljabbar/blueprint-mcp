@@ -6,11 +6,8 @@ from src.db import Database
 from src.models import (
     EdgeCreateInput,
     EdgeRelationship,
-    EdgeStatus,
     NodeCreateInput,
-    NodeStatus,
     NodeType,
-    NodeUpdateInput,
 )
 from src.tracer import list_entry_points, trace_flow
 
@@ -62,6 +59,7 @@ async def test_entry_points_root_outgoing(db: Database):
     result = await list_entry_points(db)
     ep_ids = {ep["node_id"] for ep in result["entry_points"]}
     assert svc.id in ep_ids
+    assert target.id not in ep_ids  # target has incoming edge, not an entry point
 
 
 # --- Flow trace tests ---
@@ -100,7 +98,10 @@ async def test_branch_detection(db: Database):
         EdgeCreateInput(source_id=a.id, target_id=c.id, relationship=EdgeRelationship.calls)
     )
     result = await trace_flow(db, a.id)
-    assert result["total_branches"] >= 1
+    assert result["total_branches"] == 1
+    step_names = {s["node_name"] for s in result["steps"]}
+    assert "B" in step_names
+    assert "C" in step_names
 
 
 async def test_dead_end(db: Database):
@@ -198,6 +199,11 @@ async def test_no_fallback_gap(db: Database):
         all_gaps.extend(s["gaps"])
     gap_types = [g["type"] for g in all_gaps]
     assert "NO_FALLBACK" in gap_types
+    # Verify gap details
+    fallback_gap = next(g for g in all_gaps if g["type"] == "NO_FALLBACK")
+    assert fallback_gap["node_name"] == "PaymentService"
+    assert fallback_gap["severity"] == "warning"
+    assert "Stripe" in fallback_gap["message"]
 
 
 async def test_max_depth_limit(db: Database):
@@ -216,4 +222,4 @@ async def test_max_depth_limit(db: Database):
         EdgeCreateInput(source_id=c.id, target_id=d.id, relationship=EdgeRelationship.calls)
     )
     result = await trace_flow(db, a.id, max_depth=2)
-    assert result["total_steps"] <= 3
+    assert result["total_steps"] == 2

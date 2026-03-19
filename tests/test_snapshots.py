@@ -35,7 +35,7 @@ async def test_snapshot_and_compare_additions(db: Database):
     diff = await compare_snapshots(db, snap["id"])
     added_names = {n["name"] for n in diff["nodes"]["added"]}
     assert "ServiceB" in added_names
-    assert diff["summary"]["nodes_added"] >= 1
+    assert diff["summary"]["nodes_added"] == 1
 
 
 async def test_snapshot_and_compare_removals(db: Database):
@@ -51,7 +51,7 @@ async def test_snapshot_and_compare_removals(db: Database):
     diff = await compare_snapshots(db, snap["id"])
     removed_names = {n["name"] for n in diff["nodes"]["removed"]}
     assert "ServiceB" in removed_names
-    assert diff["summary"]["nodes_removed"] >= 1
+    assert diff["summary"]["nodes_removed"] == 1
 
 
 async def test_snapshot_and_compare_changes(db: Database):
@@ -124,6 +124,11 @@ async def test_restore_snapshot_full_cycle(db: Database):
     restored_b = await db.get_node(b.id)
     assert restored_b is not None
     assert restored_b.name == "Beta"
+
+    # Verify edge was also restored
+    all_edges = await db.get_all_edges()
+    restored_edge_ids = {e.id for e in all_edges}
+    assert edge.id in restored_edge_ids
 
 
 async def test_restore_snapshot_requires_confirm(db: Database):

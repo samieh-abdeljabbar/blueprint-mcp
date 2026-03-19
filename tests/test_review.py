@@ -6,11 +6,8 @@ from src.db import Database
 from src.models import (
     EdgeCreateInput,
     EdgeRelationship,
-    EdgeStatus,
     NodeCreateInput,
-    NodeStatus,
     NodeType,
-    NodeUpdateInput,
 )
 from src.review import get_review_prompt
 
@@ -89,8 +86,8 @@ async def test_review_scoped_to_subtree(db: Database):
 
 
 async def test_review_empty_blueprint(db: Database):
-    """Empty DB → review_prompt mentions 'no' or '0 components', sections >= 1."""
+    """Empty DB → review_prompt mentions '0' components, sections >= 1."""
     result = await get_review_prompt(db)
     prompt = result["review_prompt"].lower()
-    assert "0" in prompt or "no" in prompt
+    assert "total components: 0" in prompt or "0 component" in prompt
     assert result["sections"] >= 1

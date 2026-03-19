@@ -27,6 +27,12 @@ async def test_link_and_retrieve(meta_path: str):
     assert pmap["total_links"] == 1
     assert "ProjectA" in pmap["projects"]
     assert "ProjectB" in pmap["projects"]
+    # Verify link content
+    link = pmap["links"][0]
+    assert link["relationship"] == "feeds_into"
+    assert link["label"] == "Daily sync"
+    assert "api_service" in link["from"]
+    assert "data_pipeline" in link["to"]
 
 
 async def test_project_filter(meta_path: str):

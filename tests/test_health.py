@@ -136,11 +136,13 @@ async def test_project_mixed_nodes(db: Database):
     result = await health_report(db)
 
     assert result["total_nodes"] == 3
-    assert 0 <= result["overall_score"] <= 100
-    assert result["grade"] in ("A", "B", "C", "D", "F")
+    assert result["overall_score"] < 60  # broken + orphan nodes drag score down
+    assert result["grade"] in ("D", "F")
     assert result["node_scores"]["healthy"] + result["node_scores"]["needs_attention"] + result["node_scores"]["critical"] == 3
-    # There should be at least one issue flagged (broken node, orphan, etc.)
-    assert len(result["top_issues"]) > 0
+    # Verify specific issues are flagged
+    issues_str = " ".join(result["top_issues"])
+    assert "broken" in issues_str
+    assert "orphan" in issues_str
 
 
 async def test_single_node_health_returns_breakdown(db: Database):

@@ -42,6 +42,7 @@ async def test_mermaid_contains_nodes(db: Database):
     assert "Frontend" in content
     assert "Backend" in content
     assert "Database" in content
+    assert "-->" in content  # edges should produce arrow syntax
 
 
 async def test_markdown_contains_nodes(db: Database):
@@ -139,5 +140,6 @@ async def test_export_dot_format(db: Database):
     assert "digraph" in content
     assert "WebApp" in content
     assert "TaskQueue" in content
+    assert "->" in content      # edge arrow syntax in DOT format
     assert "green" in content   # built status color
     assert "gold" in content    # planned status color

@@ -126,7 +126,6 @@ def _check_circular_dependencies(
 
     WHITE, GRAY, BLACK = 0, 1, 2
     color: dict[str, int] = {n.id: WHITE for n in nodes}
-    parent: dict[str, str | None] = {n.id: None for n in nodes}
 
     def dfs(u: str, path: list[str]) -> list[str] | None:
         color[u] = GRAY

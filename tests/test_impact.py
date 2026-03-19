@@ -6,11 +6,8 @@ from src.db import Database
 from src.models import (
     EdgeCreateInput,
     EdgeRelationship,
-    EdgeStatus,
     NodeCreateInput,
-    NodeStatus,
     NodeType,
-    NodeUpdateInput,
 )
 from src.impact import impact_analysis
 
