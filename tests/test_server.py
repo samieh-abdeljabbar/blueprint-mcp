@@ -618,3 +618,48 @@ async def test_invalid_edge_relationship():
             target_id="b",
             relationship="nonexistent_relationship",
         )
+
+
+# --- New relationship types ---
+
+
+@pytest.mark.parametrize("rel", [
+    "observes", "creates", "produces", "consumes", "delegates",
+    "controls", "uses", "updates", "implements", "emits",
+])
+async def test_new_edge_relationships(db: Database, rel: str):
+    """Each new relationship type can be used to create an edge."""
+    n1 = await db.create_node(
+        NodeCreateInput(name="Source", type=NodeType.service)
+    )
+    n2 = await db.create_node(
+        NodeCreateInput(name="Target", type=NodeType.service)
+    )
+    edge = await db.create_edge(
+        EdgeCreateInput(
+            source_id=n1.id,
+            target_id=n2.id,
+            relationship=rel,
+        )
+    )
+    assert edge.relationship == EdgeRelationship(rel)
+    fetched = await db.get_edge(edge.id)
+    assert fetched.relationship.value == rel
+
+
+# --- New node types ---
+
+
+@pytest.mark.parametrize("node_type", [
+    "submodule", "class_def", "struct", "protocol", "view",
+    "test", "script", "middleware", "migration", "webhook",
+    "worker", "model", "schema", "enum_def", "util",
+])
+async def test_new_node_types(db: Database, node_type: str):
+    """Each new node type can be used to create and retrieve a node."""
+    node = await db.create_node(
+        NodeCreateInput(name=f"My {node_type}", type=node_type)
+    )
+    assert node.type == NodeType(node_type)
+    fetched = await db.get_node(node.id)
+    assert fetched.type.value == node_type

@@ -71,6 +71,17 @@ CREATE INDEX IF NOT EXISTS idx_edges_source ON edges(source_id);
 CREATE INDEX IF NOT EXISTS idx_edges_target ON edges(target_id);
 CREATE INDEX IF NOT EXISTS idx_changelog_timestamp ON changelog(timestamp);
 CREATE INDEX IF NOT EXISTS idx_nodes_name_type ON nodes(name, type);
+
+CREATE TABLE IF NOT EXISTS snapshots (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT,
+    node_data TEXT NOT NULL,
+    edge_data TEXT NOT NULL,
+    node_count INTEGER NOT NULL,
+    edge_count INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 """
 
 
@@ -140,6 +151,77 @@ class Database:
     async def close(self) -> None:
         if self.db:
             await self.db.close()
+
+    # --- Bulk queries ---
+
+    async def get_all_nodes(self) -> list[Node]:
+        """Return all nodes as model instances."""
+        cursor = await self.db.execute("SELECT * FROM nodes ORDER BY created_at")
+        rows = await cursor.fetchall()
+        return [_row_to_node(r) for r in rows]
+
+    async def get_all_edges(self) -> list[Edge]:
+        """Return all edges as model instances."""
+        cursor = await self.db.execute("SELECT * FROM edges ORDER BY created_at")
+        rows = await cursor.fetchall()
+        return [_row_to_edge(r) for r in rows]
+
+    # --- Snapshot CRUD ---
+
+    async def create_snapshot(self, name: str, description: str | None = None) -> dict:
+        snapshot_id = _new_id()
+        now = _now()
+        nodes = await self.get_all_nodes()
+        edges = await self.get_all_edges()
+        node_data = json.dumps([n.model_dump() for n in nodes])
+        edge_data = json.dumps([e.model_dump() for e in edges])
+        await self.db.execute(
+            """INSERT INTO snapshots (id, name, description, node_data, edge_data, node_count, edge_count, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (snapshot_id, name, description, node_data, edge_data, len(nodes), len(edges), now),
+        )
+        await self.db.commit()
+        return {
+            "id": snapshot_id,
+            "name": name,
+            "description": description,
+            "node_count": len(nodes),
+            "edge_count": len(edges),
+            "created_at": now,
+        }
+
+    async def list_snapshots(self) -> list[dict]:
+        cursor = await self.db.execute(
+            "SELECT id, name, description, node_count, edge_count, created_at FROM snapshots ORDER BY created_at DESC"
+        )
+        rows = await cursor.fetchall()
+        return [
+            {
+                "id": r["id"],
+                "name": r["name"],
+                "description": r["description"],
+                "node_count": r["node_count"],
+                "edge_count": r["edge_count"],
+                "created_at": r["created_at"],
+            }
+            for r in rows
+        ]
+
+    async def get_snapshot(self, snapshot_id: str) -> dict | None:
+        cursor = await self.db.execute("SELECT * FROM snapshots WHERE id = ?", (snapshot_id,))
+        row = await cursor.fetchone()
+        if row is None:
+            return None
+        return {
+            "id": row["id"],
+            "name": row["name"],
+            "description": row["description"],
+            "node_data": json.loads(row["node_data"]),
+            "edge_data": json.loads(row["edge_data"]),
+            "node_count": row["node_count"],
+            "edge_count": row["edge_count"],
+            "created_at": row["created_at"],
+        }
 
     # --- Changelog ---
 

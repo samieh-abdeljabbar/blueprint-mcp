@@ -23,6 +23,21 @@ class NodeType(str, Enum):
     external = "external"
     config = "config"
     file = "file"
+    submodule = "submodule"
+    class_def = "class_def"
+    struct = "struct"
+    protocol = "protocol"
+    view = "view"
+    test = "test"
+    script = "script"
+    middleware = "middleware"
+    migration = "migration"
+    webhook = "webhook"
+    worker = "worker"
+    model = "model"
+    schema = "schema"
+    enum_def = "enum_def"
+    util = "util"
 
 
 class NodeStatus(str, Enum):
@@ -43,6 +58,16 @@ class EdgeRelationship(str, Enum):
     inherits = "inherits"
     contains = "contains"
     exposes = "exposes"
+    observes = "observes"
+    creates = "creates"
+    produces = "produces"
+    consumes = "consumes"
+    delegates = "delegates"
+    controls = "controls"
+    uses = "uses"
+    updates = "updates"
+    implements = "implements"
+    emits = "emits"
 
 
 class EdgeStatus(str, Enum):
@@ -187,3 +212,50 @@ class Issue(BaseModel):
     message: str
     node_ids: list[str]
     suggestion: str
+
+
+# --- Questions models ---
+
+
+class ProjectQuestion(BaseModel):
+    id: str
+    category: str
+    severity: str
+    question: str
+    context: str
+    fix_prompt: str
+    learn_more: str
+    related_nodes: list[str] = []
+    highlight_nodes: list[str] = []
+
+
+# --- Flow models ---
+
+
+class FlowGap(BaseModel):
+    type: str
+    node_id: str
+    node_name: str
+    message: str
+    severity: str = "warning"
+
+
+class FlowStep(BaseModel):
+    step: int
+    node_id: str
+    node_name: str
+    node_type: str
+    relationship: str | None = None
+    edge_label: str | None = None
+    branches: int = 0
+    gaps: list[FlowGap] = []
+    is_cycle: bool = False
+
+
+class EntryPoint(BaseModel):
+    node_id: str
+    node_name: str
+    node_type: str
+    description: str | None = None
+    connections_out: int = 0
+    suggested_trigger: str = ""

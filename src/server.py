@@ -268,23 +268,145 @@ async def get_changes(since: str, ctx: Context = None) -> dict:
     }
 
 
-# --- Viewer tool ---
+# --- Phase B: Intelligence tools ---
 
-import subprocess
-import sys
+from src.questions import get_project_questions as _get_project_questions
 
 
 @mcp.tool
-async def open_viewer(port: int = 3333, ctx: Context = None) -> dict:
-    """Open the blueprint viewer in a browser."""
+async def get_project_questions(
+    category: str = "all", node_id: str | None = None, ctx: Context = None
+) -> dict:
+    """Analyze the blueprint and generate actionable questions about gaps, risks, and improvements."""
     db = _get_db(ctx)
-    db_path = db.db_path
-    subprocess.Popen(
-        [sys.executable, "-m", "src.viewer.serve", "--db-path", db_path, "--port", str(port), "--open"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    return {"status": "started", "url": f"http://localhost:{port}"}
+    return await _get_project_questions(db, category, node_id)
+
+
+from src.review import get_review_prompt as _get_review_prompt
+
+
+@mcp.tool
+async def get_review_prompt(
+    focus: str = "all", node_id: str | None = None, ctx: Context = None
+) -> dict:
+    """Generate a structured review document with architecture overview, issues, and gaps."""
+    db = _get_db(ctx)
+    return await _get_review_prompt(db, focus, node_id)
+
+
+from src.impact import impact_analysis as _impact_analysis
+
+
+@mcp.tool
+async def impact_analysis(
+    node_id: str, depth: int = -1, direction: str = "downstream", ctx: Context = None
+) -> dict:
+    """Trace the impact of changing a node — find all affected components downstream, upstream, or both."""
+    db = _get_db(ctx)
+    return await _impact_analysis(db, node_id, depth, direction)
+
+
+# --- Phase C: Flow tools ---
+
+from src.tracer import list_entry_points as _list_entry_points
+
+
+@mcp.tool
+async def list_entry_points(ctx: Context = None) -> dict:
+    """Find all entry points (routes, APIs, webhooks) in the blueprint."""
+    db = _get_db(ctx)
+    return await _list_entry_points(db)
+
+
+from src.tracer import trace_flow as _trace_flow
+
+
+@mcp.tool
+async def trace_flow(
+    start_node_id: str,
+    trigger: str | None = None,
+    max_depth: int = 20,
+    include_error_paths: bool = True,
+    ctx: Context = None,
+) -> dict:
+    """Trace a request/data flow through the system from a starting node, detecting gaps and dead ends."""
+    db = _get_db(ctx)
+    return await _trace_flow(db, start_node_id, trigger, max_depth, include_error_paths)
+
+
+from src.whatif import what_if as _what_if
+
+
+@mcp.tool
+async def what_if(node_id: str, scenario: str, ctx: Context = None) -> dict:
+    """Simulate a what-if scenario (remove, break, disconnect, overload) for a node."""
+    db = _get_db(ctx)
+    return await _what_if(db, node_id, scenario)
+
+
+# --- Phase D: Viewer tools ---
+
+from src.xray import render_blueprint as _render_blueprint
+
+
+@mcp.tool
+async def render_blueprint(
+    output_path: str = ".blueprint.html", theme: str = "light", ctx: Context = None
+) -> dict:
+    """Generate a self-contained HTML visualization of the blueprint with D3.js."""
+    db = _get_db(ctx)
+    return await _render_blueprint(db, output_path, theme)
+
+
+# --- Phase E: Snapshots & Export tools ---
+
+from src.snapshots import (
+    snapshot_blueprint as _snapshot_blueprint,
+    list_snapshots as _list_snapshots,
+    compare_snapshots as _compare_snapshots,
+)
+
+
+@mcp.tool
+async def snapshot_blueprint(
+    name: str, description: str | None = None, ctx: Context = None
+) -> dict:
+    """Save a snapshot of the current blueprint state for later comparison."""
+    db = _get_db(ctx)
+    return await _snapshot_blueprint(db, name, description)
+
+
+@mcp.tool
+async def list_snapshots(ctx: Context = None) -> dict:
+    """List all saved blueprint snapshots."""
+    db = _get_db(ctx)
+    return await _list_snapshots(db)
+
+
+@mcp.tool
+async def compare_snapshots(
+    snapshot_id: str, compare_to: str | None = None, ctx: Context = None
+) -> dict:
+    """Compare a snapshot against another snapshot or the current blueprint state."""
+    db = _get_db(ctx)
+    return await _compare_snapshots(db, snapshot_id, compare_to)
+
+
+from src.export import export_mermaid as _export_mermaid, export_markdown as _export_markdown
+
+
+@mcp.tool
+async def export_mermaid(scope: str | None = None, ctx: Context = None) -> dict:
+    """Export the blueprint as a Mermaid diagram definition."""
+    db = _get_db(ctx)
+    return await _export_mermaid(db, scope)
+
+
+@mcp.tool
+async def export_markdown(scope: str | None = None, ctx: Context = None) -> dict:
+    """Export the blueprint as a structured Markdown document."""
+    db = _get_db(ctx)
+    return await _export_markdown(db, scope)
 
 
 if __name__ == "__main__":
