@@ -452,7 +452,7 @@ async def test_js_scanner_detects_nextjs_layouts(db: Database):
 
     bp = await db.get_blueprint(type_filter="module")
     modules = bp["nodes"]
-    layout_nodes = [m for m in modules if m.get("metadata", {}).get("layout")]
+    layout_nodes = [m for m in modules if (m.get("metadata") or {}).get("layout")]
     assert len(layout_nodes) >= 1
     layout_names = {l["name"] for l in layout_nodes}
     assert "RootLayout" in layout_names
@@ -662,6 +662,236 @@ const count = ref(0)
         vue_mods = [m for m in modules if m.get("metadata", {}).get("framework") == "vue"]
         assert len(vue_mods) >= 1
         assert vue_mods[0]["name"] == "MyComponent"
+
+
+# =============================================================================
+# JavaScript Scanner — Edge Detection Enhancement Tests
+# =============================================================================
+
+
+async def test_js_scanner_resolves_path_alias(db: Database):
+    """@components/DashboardCard alias creates edge (DashboardDetail → DashboardCard)."""
+    info = await scan_project_files(NEXTJS_PROJECT, db)
+    scanner = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(NEXTJS_PROJECT)
+
+    bp = await db.get_blueprint()
+    edges = bp["edges"]
+    depends_on = [e for e in edges if e["relationship"] == "depends_on"]
+    nodes = {n["id"]: n["name"] for n in bp["nodes"]}
+
+    dep_pairs = set()
+    for e in depends_on:
+        src = nodes.get(e["source_id"], "")
+        tgt = nodes.get(e["target_id"], "")
+        dep_pairs.add((src, tgt))
+
+    assert ("DashboardDetail", "DashboardCard") in dep_pairs
+
+
+async def test_js_scanner_resolves_at_slash_alias(db: Database):
+    """@/lib/utils alias creates edge (Home → utils)."""
+    info = await scan_project_files(NEXTJS_PROJECT, db)
+    scanner = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(NEXTJS_PROJECT)
+
+    bp = await db.get_blueprint()
+    edges = bp["edges"]
+    depends_on = [e for e in edges if e["relationship"] == "depends_on"]
+    nodes = {n["id"]: n["name"] for n in bp["nodes"]}
+
+    dep_pairs = set()
+    for e in depends_on:
+        src = nodes.get(e["source_id"], "")
+        tgt = nodes.get(e["target_id"], "")
+        dep_pairs.add((src, tgt))
+
+    assert ("Home", "utils") in dep_pairs
+
+
+async def test_js_scanner_alias_no_tsconfig(db: Database):
+    """JS_PROJECT (no tsconfig) works fine — no crash."""
+    info = await scan_project_files(JS_PROJECT, db)
+    scanner = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
+    result = await scanner.scan(JS_PROJECT)
+    assert result.files_scanned > 0
+    assert len(result.errors) == 0
+
+
+async def test_js_scanner_reexport_creates_edge(db: Database):
+    """export { useAuth } from './useAuth' creates edge (hooks → useAuth)."""
+    info = await scan_project_files(REACT_PROJECT, db)
+    scanner = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(REACT_PROJECT)
+
+    bp = await db.get_blueprint()
+    edges = bp["edges"]
+    depends_on = [e for e in edges if e["relationship"] == "depends_on"]
+    nodes = {n["id"]: n["name"] for n in bp["nodes"]}
+
+    dep_pairs = set()
+    for e in depends_on:
+        src = nodes.get(e["source_id"], "")
+        tgt = nodes.get(e["target_id"], "")
+        dep_pairs.add((src, tgt))
+
+    assert ("hooks", "useAuth") in dep_pairs
+
+
+async def test_js_scanner_detects_custom_hooks(db: Database):
+    """useAuth + useTheme detected as function nodes with pattern='hook'."""
+    info = await scan_project_files(REACT_PROJECT, db)
+    scanner = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(REACT_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="function")
+    funcs = bp["nodes"]
+    hook_names = {f["name"] for f in funcs if f.get("metadata", {}).get("pattern") == "hook"}
+    assert "useAuth" in hook_names
+    assert "useTheme" in hook_names
+
+
+async def test_js_scanner_detects_context_provider(db: Database):
+    """ThemeContext detected with pattern='context_provider'."""
+    info = await scan_project_files(REACT_PROJECT, db)
+    scanner = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(REACT_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="module")
+    modules = bp["nodes"]
+    ctx_nodes = [m for m in modules if (m.get("metadata") or {}).get("pattern") == "context_provider"]
+    assert len(ctx_nodes) >= 1
+    ctx_names = {c["name"] for c in ctx_nodes}
+    assert "ThemeContext" in ctx_names
+
+
+async def test_js_scanner_detects_forward_ref(db: Database):
+    """Button detected with pattern='forwardRef'."""
+    info = await scan_project_files(REACT_PROJECT, db)
+    scanner = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(REACT_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="module")
+    modules = bp["nodes"]
+    ref_nodes = [m for m in modules if (m.get("metadata") or {}).get("pattern") == "forwardRef"]
+    assert len(ref_nodes) >= 1
+    ref_names = {r["name"] for r in ref_nodes}
+    assert "Button" in ref_names
+
+
+async def test_js_scanner_detects_memo(db: Database):
+    """MemoizedList detected with pattern='memo'."""
+    info = await scan_project_files(REACT_PROJECT, db)
+    scanner = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(REACT_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="module")
+    modules = bp["nodes"]
+    memo_nodes = [m for m in modules if (m.get("metadata") or {}).get("pattern") == "memo"]
+    assert len(memo_nodes) >= 1
+    memo_names = {m["name"] for m in memo_nodes}
+    assert "MemoizedList" in memo_names
+
+
+async def test_js_scanner_detects_use_client_directive(db: Database):
+    """useTheme has rendering='client' in metadata."""
+    info = await scan_project_files(REACT_PROJECT, db)
+    scanner = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(REACT_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="function")
+    funcs = bp["nodes"]
+    theme_hook = [f for f in funcs if f["name"] == "useTheme"]
+    assert len(theme_hook) >= 1
+    assert theme_hook[0]["metadata"]["rendering"] == "client"
+
+
+async def test_js_scanner_detects_use_client_on_forwardref(db: Database):
+    """Button has rendering='client' + pattern='forwardRef'."""
+    info = await scan_project_files(REACT_PROJECT, db)
+    scanner = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(REACT_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="module")
+    modules = bp["nodes"]
+    button = [m for m in modules if m["name"] == "Button"]
+    assert len(button) >= 1
+    assert button[0]["metadata"]["rendering"] == "client"
+    assert button[0]["metadata"]["pattern"] == "forwardRef"
+
+
+async def test_js_scanner_detects_api_calls(db: Database):
+    """fetch('/api/users') creates uses edge to route node."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with open(os.path.join(tmpdir, "package.json"), "w") as f:
+            f.write('{"name": "test-api-calls"}')
+
+        # Create an API route
+        api_dir = os.path.join(tmpdir, "routes")
+        os.makedirs(api_dir)
+        with open(os.path.join(api_dir, "users.js"), "w") as f:
+            f.write("""const express = require('express');
+const router = express.Router();
+router.get('/api/users', (req, res) => res.json([]));
+module.exports = router;
+""")
+
+        # Create a component that calls the API
+        with open(os.path.join(tmpdir, "UserList.tsx"), "w") as f:
+            f.write("""export default function UserList() {
+    const data = fetch('/api/users').then(r => r.json());
+    return <div>{JSON.stringify(data)}</div>;
+}
+""")
+
+        info = await scan_project_files(tmpdir, db)
+        scanner = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
+        await scanner.scan(tmpdir)
+
+        bp = await db.get_blueprint()
+        edges = bp["edges"]
+        uses_edges = [e for e in edges if e["relationship"] == "uses"]
+        nodes = {n["id"]: n["name"] for n in bp["nodes"]}
+
+        use_pairs = set()
+        for e in uses_edges:
+            src = nodes.get(e["source_id"], "")
+            tgt = nodes.get(e["target_id"], "")
+            use_pairs.add((src, tgt))
+
+        assert ("UserList", "GET /api/users") in use_pairs
+
+
+async def test_js_scanner_edge_count_realistic(db: Database):
+    """nextjs_project produces ≥6 edges (sanity check)."""
+    info = await scan_project_files(NEXTJS_PROJECT, db)
+    scanner = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(NEXTJS_PROJECT)
+
+    bp = await db.get_blueprint()
+    edges = bp["edges"]
+    assert len(edges) >= 6
+
+
+async def test_js_scanner_enhanced_idempotent(db: Database):
+    """Scanning react_project twice produces same node+edge counts."""
+    info = await scan_project_files(REACT_PROJECT, db)
+
+    scanner1 = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
+    await scanner1.scan(REACT_PROJECT)
+    bp1 = await db.get_blueprint()
+    nodes1 = len(bp1["nodes"])
+    edges1 = len(bp1["edges"])
+
+    scanner2 = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
+    await scanner2.scan(REACT_PROJECT)
+    bp2 = await db.get_blueprint()
+    nodes2 = len(bp2["nodes"])
+    edges2 = len(bp2["edges"])
+
+    assert nodes1 == nodes2
+    assert edges1 == edges2
+    assert edges1 > 0
 
 
 # =============================================================================

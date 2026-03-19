@@ -26,13 +26,21 @@ from src.scanner.js_frameworks import (
 from src.scanner.js_import_resolver import (
     extract_import_paths,
     module_name_from_path,
+    parse_path_aliases,
+    resolve_alias_import,
     resolve_import_path,
 )
 from src.scanner.js_patterns import (
+    AXIOS_API_CALL,
     CLASS_EXTENDS,
     CLASS_STANDALONE,
     CONFIG_FILES,
+    CREATE_CONTEXT,
+    CUSTOM_HOOK,
+    CUSTOM_HOOK_ARROW,
     DRIZZLE_TABLE,
+    FETCH_API_CALL,
+    FORWARD_REF,
     JS_EXTENSIONS,
     MIDDLEWARE_USE,
     NEXTJS_API_EXPORT,
@@ -40,8 +48,10 @@ from src.scanner.js_patterns import (
     REACT_ARROW_COMPONENT,
     REACT_EXPORT_DEFAULT,
     REACT_EXPORT_NAMED,
+    REACT_MEMO,
     ROUTE_PATTERN,
     TYPEORM_ENTITY,
+    USE_DIRECTIVE,
 )
 
 
@@ -59,6 +69,12 @@ class JavaScriptScanner(BaseScanner):
         # Deferred edges to create after all files scanned
         self._deferred_import_edges: list[tuple[str, str]] = []
         self._deferred_inherit_edges: list[tuple[str, str]] = []
+        # Route node IDs by API path for API call edge creation
+        self._route_node_ids: dict[str, str] = {}
+        # Deferred API call edges (source_rel_path, api_path)
+        self._deferred_api_edges: list[tuple[str, str]] = []
+        # Path alias resolution
+        self._path_aliases = parse_path_aliases(path)
 
         # Read package.json first for service node
         await self._scan_package_json(path)
@@ -115,6 +131,12 @@ class JavaScriptScanner(BaseScanner):
             self._add_error(rel_path, str(e))
             return
 
+        # Detect rendering directive ('use client' / 'use server')
+        rendering = None
+        directive_match = USE_DIRECTIVE.search(source)
+        if directive_match:
+            rendering = directive_match.group(1)
+
         # Check for framework-specific file conventions
         await self._detect_framework_conventions(rel_path, source, filepath, project_root)
 
@@ -136,7 +158,7 @@ class JavaScriptScanner(BaseScanner):
             route_path = match.group(2)
             route_name = f"{method} {route_path}"
             line = source[:match.start()].count("\n") + 1
-            await self._track_node(NodeCreateInput(
+            node_id, _ = await self._track_node(NodeCreateInput(
                 name=route_name,
                 type=NodeType.route,
                 status=NodeStatus.built,
@@ -145,9 +167,13 @@ class JavaScriptScanner(BaseScanner):
                 source_file=rel_path,
                 source_line=line,
             ))
+            self._route_node_ids[route_path] = node_id
 
         # Detect React components (all patterns)
-        await self._detect_components(source, rel_path)
+        await self._detect_components(source, rel_path, rendering=rendering)
+
+        # Detect React-specific patterns (hooks, context, forwardRef, memo)
+        await self._detect_react_patterns(source, rel_path, rendering=rendering)
 
         # Detect class definitions and inheritance
         await self._detect_classes(source, rel_path)
@@ -198,6 +224,9 @@ class JavaScriptScanner(BaseScanner):
                 ))
                 self._module_node_ids[rel_path] = node_id
 
+        # Detect API calls (fetch/axios to /api/...)
+        await self._detect_api_calls(source, rel_path)
+
         # Detect import edges
         await self._detect_imports(source, filepath, rel_path, project_root)
 
@@ -215,7 +244,7 @@ class JavaScriptScanner(BaseScanner):
                 if methods:
                     for method in methods:
                         route_name = f"{method.upper()} {route_info['route']}"
-                        await self._track_node(NodeCreateInput(
+                        node_id, _ = await self._track_node(NodeCreateInput(
                             name=route_name,
                             type=NodeType.route,
                             status=NodeStatus.built,
@@ -229,9 +258,10 @@ class JavaScriptScanner(BaseScanner):
                             },
                             source_file=rel_path,
                         ))
+                        self._route_node_ids[route_info["route"]] = node_id
                 else:
                     # No explicit exports — create a generic route
-                    await self._track_node(NodeCreateInput(
+                    node_id, _ = await self._track_node(NodeCreateInput(
                         name=route_info["route"],
                         type=NodeType.route,
                         status=NodeStatus.built,
@@ -244,6 +274,7 @@ class JavaScriptScanner(BaseScanner):
                         },
                         source_file=rel_path,
                     ))
+                    self._route_node_ids[route_info["route"]] = node_id
             else:
                 # Page route
                 node_id, _ = await self._track_node(NodeCreateInput(
@@ -305,7 +336,7 @@ class JavaScriptScanner(BaseScanner):
                 source_file=rel_path,
             ))
 
-    async def _detect_components(self, source: str, rel_path: str):
+    async def _detect_components(self, source: str, rel_path: str, rendering: str | None = None):
         """Detect React components from export patterns."""
         seen_names: set[str] = set()
 
@@ -317,12 +348,15 @@ class JavaScriptScanner(BaseScanner):
                 seen_names.add(comp_name)
 
                 line = source[:match.start()].count("\n") + 1
+                metadata: dict = {"framework": "react", "component": True}
+                if rendering:
+                    metadata["rendering"] = rendering
                 node_id, _ = await self._track_node(NodeCreateInput(
                     name=comp_name,
                     type=NodeType.module,
                     status=NodeStatus.built,
                     parent_id=self.root_id,
-                    metadata={"framework": "react", "component": True},
+                    metadata=metadata,
                     source_file=rel_path,
                     source_line=line,
                 ))
@@ -391,10 +425,13 @@ class JavaScriptScanner(BaseScanner):
         self, source: str, filepath: str, rel_path: str, project_root: str
     ):
         """Detect import statements and create depends_on edges for local imports."""
-        import_paths = extract_import_paths(source)
+        import_paths = extract_import_paths(source, self._path_aliases)
 
         for import_path in import_paths:
-            resolved = resolve_import_path(import_path, filepath, project_root)
+            if import_path.startswith("."):
+                resolved = resolve_import_path(import_path, filepath, project_root)
+            else:
+                resolved = resolve_alias_import(import_path, project_root, self._path_aliases)
             if resolved is None:
                 continue
 
@@ -423,6 +460,103 @@ class JavaScriptScanner(BaseScanner):
                 self._module_node_ids[resolved] = tgt_id
 
             self._deferred_import_edges.append((rel_path, resolved))
+
+    async def _detect_react_patterns(
+        self, source: str, rel_path: str, rendering: str | None = None
+    ):
+        """Detect React-specific patterns: hooks, context, forwardRef, memo."""
+        seen_names: set[str] = set()
+
+        # Custom hooks (useX)
+        for pattern in (CUSTOM_HOOK, CUSTOM_HOOK_ARROW):
+            for match in pattern.finditer(source):
+                hook_name = match.group(1)
+                if hook_name in seen_names:
+                    continue
+                seen_names.add(hook_name)
+                line = source[:match.start()].count("\n") + 1
+                metadata: dict = {"framework": "react", "pattern": "hook"}
+                if rendering:
+                    metadata["rendering"] = rendering
+                node_id, _ = await self._track_node(NodeCreateInput(
+                    name=hook_name,
+                    type=NodeType.function,
+                    status=NodeStatus.built,
+                    parent_id=self.root_id,
+                    metadata=metadata,
+                    source_file=rel_path,
+                    source_line=line,
+                ))
+                self._module_node_ids[rel_path] = node_id
+
+        # createContext
+        for match in CREATE_CONTEXT.finditer(source):
+            ctx_name = match.group(1)
+            if ctx_name in seen_names:
+                continue
+            seen_names.add(ctx_name)
+            line = source[:match.start()].count("\n") + 1
+            metadata = {"framework": "react", "pattern": "context_provider"}
+            if rendering:
+                metadata["rendering"] = rendering
+            node_id, _ = await self._track_node(NodeCreateInput(
+                name=ctx_name,
+                type=NodeType.module,
+                status=NodeStatus.built,
+                parent_id=self.root_id,
+                metadata=metadata,
+                source_file=rel_path,
+                source_line=line,
+            ))
+
+        # forwardRef
+        for match in FORWARD_REF.finditer(source):
+            ref_name = match.group(1)
+            if ref_name in seen_names:
+                continue
+            seen_names.add(ref_name)
+            line = source[:match.start()].count("\n") + 1
+            metadata = {"framework": "react", "pattern": "forwardRef"}
+            if rendering:
+                metadata["rendering"] = rendering
+            node_id, _ = await self._track_node(NodeCreateInput(
+                name=ref_name,
+                type=NodeType.module,
+                status=NodeStatus.built,
+                parent_id=self.root_id,
+                metadata=metadata,
+                source_file=rel_path,
+                source_line=line,
+            ))
+            self._module_node_ids[rel_path] = node_id
+
+        # React.memo
+        for match in REACT_MEMO.finditer(source):
+            memo_name = match.group(1)
+            if memo_name in seen_names:
+                continue
+            seen_names.add(memo_name)
+            line = source[:match.start()].count("\n") + 1
+            metadata = {"framework": "react", "pattern": "memo"}
+            if rendering:
+                metadata["rendering"] = rendering
+            node_id, _ = await self._track_node(NodeCreateInput(
+                name=memo_name,
+                type=NodeType.module,
+                status=NodeStatus.built,
+                parent_id=self.root_id,
+                metadata=metadata,
+                source_file=rel_path,
+                source_line=line,
+            ))
+            self._module_node_ids[rel_path] = node_id
+
+    async def _detect_api_calls(self, source: str, rel_path: str):
+        """Detect fetch/axios calls to /api/... paths."""
+        for pattern in (FETCH_API_CALL, AXIOS_API_CALL):
+            for match in pattern.finditer(source):
+                api_path = match.group(1)
+                self._deferred_api_edges.append((rel_path, api_path))
 
     async def _scan_prisma_file(self, filepath: str, project_root: str):
         """Scan .prisma files for model definitions."""
@@ -484,3 +618,17 @@ class JavaScriptScanner(BaseScanner):
                     target_id=page_id,
                     relationship=EdgeRelationship.contains,
                 ))
+
+        # API call edges (fetch/axios -> route)
+        for src_path, api_path in self._deferred_api_edges:
+            src_id = self._module_node_ids.get(src_path)
+            tgt_id = self._route_node_ids.get(api_path)
+            if src_id and tgt_id:
+                edge_key = (src_id, tgt_id)
+                if edge_key not in seen_edges:
+                    seen_edges.add(edge_key)
+                    await self._track_edge(EdgeCreateInput(
+                        source_id=src_id,
+                        target_id=tgt_id,
+                        relationship=EdgeRelationship.uses,
+                    ))

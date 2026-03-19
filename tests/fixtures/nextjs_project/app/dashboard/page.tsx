@@ -1,3 +1,5 @@
+'use client'
+
 import DashboardCard from '../../components/DashboardCard';
 
 export default function Dashboard() {

@@ -53,6 +53,63 @@ REACT_ARROW_COMPONENT = re.compile(
     r"""export\s+(?:const|let)\s+([A-Z]\w+)\s*=\s*(?:\([^)]*\)|[a-zA-Z_]\w*)\s*=>"""
 )
 
+# --- Re-export patterns ---
+
+# export { X } from './path'  |  export type { X } from './path'
+REEXPORT_NAMED = re.compile(
+    r"""export\s+(?:type\s+)?\{[^}]*\}\s+from\s+['"]([^'"]+)['"]"""
+)
+
+# export * from './path'  |  export * as X from './path'
+REEXPORT_ALL = re.compile(
+    r"""export\s+\*\s+(?:as\s+\w+\s+)?from\s+['"]([^'"]+)['"]"""
+)
+
+# --- React-specific patterns ---
+
+# export function useAuth(...)  |  export default function useAuth(...)
+CUSTOM_HOOK = re.compile(
+    r"""export\s+(?:default\s+)?function\s+(use[A-Z]\w*)"""
+)
+
+# export const useAuth = ...
+CUSTOM_HOOK_ARROW = re.compile(
+    r"""export\s+(?:const|let)\s+(use[A-Z]\w*)\s*="""
+)
+
+# const ThemeContext = createContext(...)  |  React.createContext(...)
+CREATE_CONTEXT = re.compile(
+    r"""(?:export\s+)?(?:const|let)\s+(\w+)\s*=\s*(?:React\.)?createContext"""
+)
+
+# const Button = forwardRef(...)  |  React.forwardRef(...)
+FORWARD_REF = re.compile(
+    r"""(?:export\s+)?(?:const|let)\s+(\w+)\s*=\s*(?:React\.)?forwardRef"""
+)
+
+# const MemoizedList = memo(...)  |  React.memo(...)
+REACT_MEMO = re.compile(
+    r"""(?:export\s+)?(?:const|let)\s+(\w+)\s*=\s*(?:React\.)?memo\("""
+)
+
+# 'use client'  |  "use server"
+USE_DIRECTIVE = re.compile(
+    r"""^['"]use\s+(client|server)['"]""",
+    re.MULTILINE,
+)
+
+# --- API call patterns ---
+
+# fetch('/api/users')
+FETCH_API_CALL = re.compile(
+    r"""fetch\(\s*['"](/api/[^'"]+)['"]"""
+)
+
+# axios.get('/api/users')
+AXIOS_API_CALL = re.compile(
+    r"""axios\.(?:get|post|put|delete|patch)\(\s*['"](/api/[^'"]+)['"]"""
+)
+
 # --- Class patterns ---
 
 # class X extends Y {
