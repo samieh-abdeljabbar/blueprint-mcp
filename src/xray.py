@@ -610,7 +610,11 @@ html, body {
   fill: var(--text-muted);
 }
 
-.edge-line { fill: none; stroke-width: 1.5; opacity: 0.15; }
+.edge-line { fill: none; stroke-width: 1.5; opacity: 0.08; }
+.edge-calls .edge-line { stroke-dasharray: none; }
+.edge-depends .edge-line { stroke-dasharray: 8 4; }
+.edge-data .edge-line { stroke-dasharray: 3 3; }
+.edge-structural .edge-line { stroke-dasharray: 12 4 2 4; }
 .edge-label {
   font-size: 10px; fill: var(--text-muted);
   opacity: 0; pointer-events: none;
@@ -628,7 +632,7 @@ html, body {
 .node-group.highlighted  { opacity: 1 !important; }
 .edge-group.dimmed       { opacity: 0.05; transition: opacity 0.3s; }
 .edge-group.highlighted  { opacity: 1;    transition: opacity 0.3s; }
-.edge-group.highlighted .edge-line { stroke-width: 2.5; opacity: 0.9; }
+.edge-group.highlighted .edge-line { stroke-width: 3; opacity: 1; }
 .edge-group.highlighted .edge-label { opacity: 1; }
 
 /* ---- STATUS ENCODING ---- */
@@ -926,14 +930,22 @@ const NODE_SIZES = {
 };
 
 const TIER_Y = {
-  system: 0.1, container: 0.1,
-  service: 0.3, worker: 0.3, module: 0.35, database: 0.3, api: 0.25,
-  function: 0.55, route: 0.5, table: 0.6, class_def: 0.55,
-    middleware: 0.5, webhook: 0.5, struct: 0.55, protocol: 0.55,
-  column: 0.75, config: 0.75, file: 0.75, external: 0.7,
-    script: 0.75, migration: 0.75, cache: 0.65, queue: 0.65,
-    model: 0.6, schema: 0.6, enum_def: 0.65, view: 0.6, util: 0.65,
-    submodule: 0.7, test: 0.8
+  // UI Layer — top 20%
+  system: 0.05, container: 0.05,
+  service: 0.10, worker: 0.10,
+  // Code Layer — 20-45%
+  module: 0.30, function: 0.35, class_def: 0.35,
+  struct: 0.35, protocol: 0.35,
+  // API Layer — 45-55%
+  api: 0.48, route: 0.50, webhook: 0.50, middleware: 0.48,
+  // Data Layer — 60-85%
+  database: 0.65, table: 0.70, column: 0.75,
+  cache: 0.65, queue: 0.65,
+  // Files/Config — bottom
+  file: 0.88, script: 0.88, config: 0.88, migration: 0.88,
+  external: 0.85, submodule: 0.85,
+  model: 0.55, schema: 0.55, enum_def: 0.55,
+  view: 0.70, util: 0.40, test: 0.90
 };
 
 const STATUS_COLORS = {
@@ -1007,6 +1019,15 @@ let gNodeGroups  = null;
 let gEdgeGroups  = null;
 let gGroupG      = null;
 let gW = 0, gH = 0;
+let columnNodeIds = new Set();
+
+function edgeDashClass(rel) {
+  if (['calls', 'delegates', 'uses'].includes(rel)) return 'edge-calls';
+  if (['depends_on', 'inherits', 'implements'].includes(rel)) return 'edge-depends';
+  if (['reads_from', 'writes_to', 'updates', 'produces', 'consumes'].includes(rel)) return 'edge-data';
+  if (['contains', 'creates', 'controls'].includes(rel)) return 'edge-structural';
+  return 'edge-calls';
+}
 
 /* ================================================================
    BOOTSTRAP
@@ -1126,7 +1147,7 @@ function applyFilters() {
   }
 
   d3.selectAll('.node-group').each(function(d) {
-    if (hiddenNodes.has(d.id)) { d3.select(this).style('display', 'none'); return; }
+    if (columnNodeIds.has(d.id) || hiddenNodes.has(d.id)) { d3.select(this).style('display', 'none'); return; }
     const okType   = !visibleTypes || visibleTypes.has(d.type);
     const okSearch = !term ||
       d.name.toLowerCase().includes(term) ||
@@ -1142,7 +1163,7 @@ function applyFilters() {
 }
 
 function isNodeVisible(nodeId) {
-  if (hiddenNodes.has(nodeId)) return false;
+  if (columnNodeIds.has(nodeId) || hiddenNodes.has(nodeId)) return false;
   const el = d3.select('#node-' + CSS.escape(nodeId));
   return !el.empty() && el.style('display') !== 'none';
 }
@@ -1430,6 +1451,25 @@ function renderNodeDetail(nd) {
        + esc(JSON.stringify(nd.metadata, null, 2)) + '</div>';
   }
 
+  /* ---- Columns (for table nodes with embedded columns) ---- */
+  const simNode = gNodeMap[nd.id];
+  if (simNode && simNode._columns && simNode._columns.length > 0) {
+    h += '<div class="field-label">Columns (' + simNode._columns.length + ')</div>';
+    h += '<div class="conn-summary" style="flex-direction:column;gap:0">';
+    simNode._columns.forEach(col => {
+      const isPK = col.metadata && col.metadata.primary_key;
+      const isFK = col.metadata && col.metadata.fk;
+      const icon = isPK ? '\uD83D\uDD11 ' : isFK ? '\u2192 ' : '';
+      const colType = (col.metadata && col.metadata.data_type) || '';
+      h += '<div style="font-size:12px;padding:2px 0;font-family:monospace">';
+      h += icon + esc(col.name);
+      if (colType) h += ' <span style="color:var(--text-muted)">' + esc(colType) + '</span>';
+      if (isFK) h += ' <span style="color:#3b82f6;font-size:10px">FK\u2192' + esc(col.metadata.fk) + '</span>';
+      h += '</div>';
+    });
+    h += '</div>';
+  }
+
   /* ---- Connection health summary ---- */
   if (conns.length > 0) {
     const outgoing = conns.filter(e => e.source_id === nd.id);
@@ -1674,7 +1714,7 @@ function buildGraph() {
     const [w, h] = getNodeSize(n, degreeMap[n.id] || 0);
     return {
       ...n,
-      x: gW / 2 + (Math.random() - 0.5) * gW * 0.6,
+      x: gW * 0.1 + Math.random() * gW * 0.8,
       y: gH / 2 + (Math.random() - 0.5) * gH * 0.6,
       w: w, h: h
     };
@@ -1682,10 +1722,41 @@ function buildGraph() {
   gNodeMap = {};
   gNodeData.forEach(n => gNodeMap[n.id] = n);
 
-  /* ---- Prepare edge data ---- */
-  gEdgeData = DATA.edges
-    .filter(e => gNodeMap[e.source_id] && gNodeMap[e.target_id])
-    .map(e => ({ ...e, source: e.source_id, target: e.target_id }));
+  /* ---- Separate column nodes from simulation (render inside tables) ---- */
+  const columnsByParent = {};
+  gNodeData.forEach(n => {
+    if (n.type === 'column' && n.parent_id) {
+      if (!columnsByParent[n.parent_id]) columnsByParent[n.parent_id] = [];
+      columnsByParent[n.parent_id].push(n);
+    }
+  });
+  gNodeData = gNodeData.filter(n => n.type !== 'column');
+  gNodeData.forEach(n => {
+    if (columnsByParent[n.id]) {
+      n._columns = columnsByParent[n.id];
+      n.h = 34 + (n._columns.length * 18) + 6;
+      n.w = Math.max(n.w, 200);
+    }
+  });
+  columnNodeIds = new Set();
+  Object.values(columnsByParent).flat().forEach(c => columnNodeIds.add(c.id));
+  /* Rebuild gNodeMap without columns */
+  gNodeMap = {};
+  gNodeData.forEach(n => gNodeMap[n.id] = n);
+
+  /* ---- Prepare edge data (remap column references to parent table) ---- */
+  gEdgeData = DATA.edges.map(e => {
+    let src = e.source_id, tgt = e.target_id;
+    if (columnNodeIds.has(src)) {
+      const col = Object.values(columnsByParent).flat().find(c => c.id === src);
+      if (col) src = col.parent_id;
+    }
+    if (columnNodeIds.has(tgt)) {
+      const col = Object.values(columnsByParent).flat().find(c => c.id === tgt);
+      if (col) tgt = col.parent_id;
+    }
+    return { ...e, source_id: src, target_id: tgt, source: src, target: tgt };
+  }).filter(e => gNodeMap[e.source_id] && gNodeMap[e.target_id]);
 
   const edgePairCount = {};
   gEdgeData.forEach(e => {
@@ -1760,7 +1831,7 @@ function buildGraph() {
   /* ---- Draw edges ---- */
   gEdgeGroups = edgeG.selectAll('.edge-group')
     .data(gEdgeData).join('g')
-    .attr('class', d => 'edge-group' + (d.status === 'planned' ? ' planned' : ''));
+    .attr('class', d => 'edge-group ' + edgeDashClass(d.relationship) + (d.status === 'planned' ? ' planned' : ''));
 
   gEdgeGroups.append('path')
     .attr('class', d => 'edge-line' + (d.status === 'planned' ? ' planned' : ''))
@@ -1868,6 +1939,55 @@ function buildGraph() {
     .attr('x', 12).attr('y', d => d.h - 8)
     .text(d => d.source_file ? trunc(d.source_file, Math.floor((d.w - 20) / 6)) : '');
 
+  /* ---- Render columns inside table nodes (database-style cards) ---- */
+  gNodeGroups.filter(d => d._columns && d._columns.length > 0).each(function(d) {
+    const g = d3.select(this);
+    const headerH = 30;
+
+    // Separator line below header
+    g.append('line')
+      .attr('x1', 4).attr('y1', headerH)
+      .attr('x2', d.w).attr('y2', headerH)
+      .attr('stroke', 'var(--node-border)').attr('stroke-opacity', 0.4);
+
+    d._columns.forEach((col, i) => {
+      const y = headerH + 2 + (i * 18);
+      const isPK = col.metadata && col.metadata.primary_key;
+      const isFK = col.metadata && col.metadata.fk;
+      const colType = (col.metadata && col.metadata.data_type) || '';
+
+      // Row background (alternating for readability)
+      if (i % 2 === 0) {
+        g.append('rect')
+          .attr('x', 4).attr('y', y)
+          .attr('width', d.w - 4).attr('height', 18)
+          .attr('fill', 'var(--bg-tertiary)').attr('fill-opacity', 0.3)
+          .attr('pointer-events', 'none');
+      }
+
+      // Key indicator
+      let prefix = '  ';
+      if (isPK) prefix = '\uD83D\uDD11';
+      else if (isFK) prefix = '\u2192 ';
+
+      g.append('text')
+        .attr('x', 10).attr('y', y + 13)
+        .attr('font-size', '11px')
+        .attr('fill', isPK ? '#f59e0b' : isFK ? '#3b82f6' : 'var(--text-secondary)')
+        .text(prefix + ' ' + col.name);
+
+      // Column type (right-aligned, muted)
+      if (colType) {
+        g.append('text')
+          .attr('x', d.w - 8).attr('y', y + 13)
+          .attr('text-anchor', 'end')
+          .attr('font-size', '9px')
+          .attr('fill', 'var(--text-muted)')
+          .text(colType.toLowerCase());
+      }
+    });
+  });
+
   /* Apply status opacity */
   gNodeGroups
     .style('opacity', d => {
@@ -1876,6 +1996,28 @@ function buildGraph() {
       return null;
     })
     .style('filter', d => d.status === 'deprecated' ? 'grayscale(0.8)' : null);
+
+  /* ---- Layer labels (Fix 4d) ---- */
+  const layers = [
+    { label: 'UI LAYER', y: 0.10 },
+    { label: 'CODE', y: 0.30 },
+    { label: 'API', y: 0.48 },
+    { label: 'DATA', y: 0.68 },
+    { label: 'CONFIG', y: 0.88 }
+  ];
+  const labelG = mainG.append('g').attr('class', 'layer-labels');
+  layers.forEach(l => {
+    labelG.append('text')
+      .attr('x', 20)
+      .attr('y', l.y * gH)
+      .attr('font-size', '10px')
+      .attr('font-weight', '700')
+      .attr('fill', 'var(--text-muted)')
+      .attr('opacity', 0.3)
+      .style('text-transform', 'uppercase')
+      .style('letter-spacing', '2px')
+      .text(l.label);
+  });
 
   /* ---- Build simulation ---- */
   rebuildSimulation();
@@ -1919,30 +2061,40 @@ function clusterForce() {
 function groupRepulsionForce() {
   let nodes;
   function force(alpha) {
-    const boxes = {};
-    nodes.forEach(d => {
-      const pid = d.parent_id;
-      if (!pid || !gParentIds.has(pid)) return;
-      if (!boxes[pid]) boxes[pid] = { x1:Infinity, y1:Infinity, x2:-Infinity, y2:-Infinity, nodes:[] };
-      const b = boxes[pid];
-      b.x1 = Math.min(b.x1, d.x - d.w/2); b.y1 = Math.min(b.y1, d.y - d.h/2);
-      b.x2 = Math.max(b.x2, d.x + d.w/2); b.y2 = Math.max(b.y2, d.y + d.h/2);
-      b.nodes.push(d);
+    const groups = [];
+    gParentIds.forEach(pid => {
+      if (collapsedGroups.has(pid)) return;
+      const parent = gNodeMap[pid];
+      if (!parent) return;
+      const children = (gChildrenOf[pid] || [])
+        .map(cid => gNodeMap[cid])
+        .filter(Boolean)
+        .filter(n => !hiddenNodes.has(n.id));
+      if (children.length === 0) return;
+      const all = [parent, ...children];
+      groups.push({
+        pid,
+        cx: d3.mean(all, n => n.x),
+        cy: d3.mean(all, n => n.y),
+        children: all,
+        x1: d3.min(all, n => n.x - n.w/2) - 50,
+        y1: d3.min(all, n => n.y - n.h/2) - 50,
+        x2: d3.max(all, n => n.x + n.w/2) + 50,
+        y2: d3.max(all, n => n.y + n.h/2) + 50
+      });
     });
-    const pids = Object.keys(boxes);
-    for (let i = 0; i < pids.length; i++) {
-      for (let j = i+1; j < pids.length; j++) {
-        const da = gDepthMap[pids[i]] || 0, db = gDepthMap[pids[j]] || 0;
-        if (da !== db) continue;
-        const a = boxes[pids[i]], b = boxes[pids[j]];
-        const pad = 50;
-        const ox = Math.min(a.x2+pad, b.x2+pad) - Math.max(a.x1-pad, b.x1-pad);
-        const oy = Math.min(a.y2+pad, b.y2+pad) - Math.max(a.y1-pad, b.y1-pad);
-        if (ox > 0 && oy > 0) {
-          const dx = ((a.x1+a.x2)/2) - ((b.x1+b.x2)/2);
-          const sep = (dx >= 0 ? 1 : -1) * alpha * 0.8;
-          a.nodes.forEach(n => { n.vx += sep; });
-          b.nodes.forEach(n => { n.vx -= sep; });
+    for (let i = 0; i < groups.length; i++) {
+      for (let j = i + 1; j < groups.length; j++) {
+        const a = groups[i], b = groups[j];
+        const overlapX = Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1);
+        const overlapY = Math.min(a.y2, b.y2) - Math.max(a.y1, b.y1);
+        if (overlapX > 0 && overlapY > 0) {
+          const dx = a.cx - b.cx || 1;
+          const dy = a.cy - b.cy || 1;
+          const pushX = (overlapX * 0.3) * Math.sign(dx) * alpha;
+          const pushY = (overlapY * 0.3) * Math.sign(dy) * alpha;
+          a.children.forEach(n => { n.vx += pushX; n.vy += pushY; });
+          b.children.forEach(n => { n.vx -= pushX; n.vy -= pushY; });
         }
       }
     }
@@ -1963,18 +2115,27 @@ function rebuildSimulation() {
         return (s && t && s.parent_id && s.parent_id === t.parent_id) ? 220 : 180;
       }).strength(0.4))
     .force('collision', d3.forceCollide().radius(d => Math.max(d.w, d.h) / 2 + 20).strength(0.8))
-    .force('x', d3.forceX(gW / 2).strength(0.04))
+    .force('x', d3.forceX(gW / 2).strength(0.008))
     .alphaDecay(0.02)
     .alphaMin(0.01);
 
   if (layoutMode === 'clustered') {
     simulation
       .force('charge', d3.forceManyBody().strength(-400).distanceMax(600))
-      .force('center', d3.forceCenter(gW / 2, gH / 2).strength(0.03))
+      .force('center', d3.forceCenter(gW / 2, gH / 2).strength(0.01))
       .force('tierY', d3.forceY(d => {
         const tier = TIER_Y[d.type];
         return (tier !== undefined ? tier : 0.5) * gH;
-      }).strength(0.3))
+      }).strength(d => {
+        if (['database', 'table', 'cache', 'queue'].includes(d.type)) return 0.5;
+        if (['route', 'api', 'middleware', 'webhook'].includes(d.type)) return 0.4;
+        return 0.25;
+      }))
+      .force('spreadX', d3.forceX(d => {
+        const hash = d.name.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+        const offset = ((hash % 100) / 100 - 0.5) * gW * 0.6;
+        return gW / 2 + offset;
+      }).strength(0.02))
       .force('cluster', clusterForce())
       .force('groupRepulsion', groupRepulsionForce());
   } else {
@@ -2155,7 +2316,7 @@ function updateMinimap() {
   if (!mainG) return;
   const mm  = d3.select('#minimap-svg');
   const mmW = 200, mmH = 150;
-  const nodes = d3.selectAll('.node-group').data().filter(n => !hiddenNodes.has(n.id));
+  const nodes = d3.selectAll('.node-group').data().filter(n => !hiddenNodes.has(n.id) && !columnNodeIds.has(n.id));
   if (nodes.length === 0) return;
 
   const pad = 50;
