@@ -1,6 +1,8 @@
 __pycache__/
 *.pyc
 .blueprint.db
+.blueprint.db-shm
+.blueprint.db-wal
 .venv/
 *.egg-info/
 dist/
