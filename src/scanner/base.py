@@ -17,7 +17,10 @@ from src.models import (
 )
 
 # Always ignored directories regardless of .gitignore
-ALWAYS_IGNORE = {".git", "node_modules", "__pycache__", ".venv", "venv", ".env", ".tox", ".mypy_cache"}
+ALWAYS_IGNORE = {
+    ".git", "node_modules", "__pycache__", ".venv", "venv", ".env", ".tox", ".mypy_cache",
+    ".build", "target", ".terraform", "Pods", "DerivedData",
+}
 
 
 class BaseScanner(ABC):

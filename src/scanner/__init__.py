@@ -10,12 +10,22 @@ from src.scanner.file_scanner import scan_project_files
 from src.scanner.python_scanner import PythonScanner
 from src.scanner.javascript_scanner import JavaScriptScanner
 from src.scanner.docker_scanner import DockerScanner
+from src.scanner.swift_scanner import SwiftScanner
+from src.scanner.rust_scanner import RustScanner
+from src.scanner.go_scanner import GoScanner
+from src.scanner.config_scanner import ConfigScanner
+from src.scanner.sql_scanner import SQLScanner
 
 # Map language names to scanner classes
 SCANNER_MAP = {
     "python": PythonScanner,
     "javascript": JavaScriptScanner,
     "docker": DockerScanner,
+    "swift": SwiftScanner,
+    "rust": RustScanner,
+    "go": GoScanner,
+    "config": ConfigScanner,
+    "sql": SQLScanner,
 }
 
 
@@ -98,6 +108,7 @@ async def scan_single_file(path: str, db: Database) -> dict:
         return {"error": f"File not found: {path}"}
 
     ext = os.path.splitext(path)[1].lower()
+    basename = os.path.basename(path)
     project_root = os.path.dirname(path)
 
     # Create a temporary root node for the file's project
@@ -115,7 +126,17 @@ async def scan_single_file(path: str, db: Database) -> dict:
         scanner_cls = PythonScanner
     elif ext in (".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"):
         scanner_cls = JavaScriptScanner
-    elif os.path.basename(path) in ("Dockerfile", "docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"):
+    elif ext == ".swift":
+        scanner_cls = SwiftScanner
+    elif ext == ".rs":
+        scanner_cls = RustScanner
+    elif ext == ".go":
+        scanner_cls = GoScanner
+    elif ext == ".sql" or ext == ".prisma":
+        scanner_cls = SQLScanner
+    elif ext in (".tf", ".graphql", ".gql"):
+        scanner_cls = ConfigScanner
+    elif basename in ("Dockerfile", "docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"):
         scanner_cls = DockerScanner
 
     if scanner_cls is None:

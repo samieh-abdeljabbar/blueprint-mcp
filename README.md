@@ -6,7 +6,7 @@ Blueprint MCP is a [Model Context Protocol](https://modelcontextprotocol.io/) se
 
 Scan existing codebases to auto-detect architecture, apply starter templates, find architectural issues, trace data flows, simulate what-if scenarios, and export to Mermaid, Graphviz, JSON, CSV, or Markdown.
 
-**38 MCP tools | 196 tests | 6 templates | 4 language scanners | 10 architectural checks**
+**38 MCP tools | 309 tests | 6 templates | 9 language scanners | 10 architectural checks**
 
 ---
 
@@ -352,9 +352,19 @@ The scanner auto-detects architecture from existing codebases. It's **non-destru
 
 | Language | Method | Detects |
 |----------|--------|---------|
-| **Python** | AST parsing | FastAPI/Flask apps, route decorators, SQLAlchemy models with columns, imports |
-| **JavaScript/TypeScript** | Regex | Express routes, React components, Prisma models, package.json |
+| **Python** | AST parsing | FastAPI/Flask/Django apps, routes, SQLAlchemy/Django models, Pydantic models, Celery tasks, imports, classes, protocols |
+| **JavaScript/TypeScript** | Regex | Express/Next.js/React routes & components, Prisma/Drizzle/TypeORM models, Vue SFCs, class inheritance, package.json |
+| **SQL/Database** | Regex | CREATE TABLE with columns, foreign keys, views with source edges, indexes, triggers, functions, ALTER TABLE FK |
+| **Prisma** | Regex | Datasource → database node, models → tables, fields → columns, `@relation` → edges |
+| **ORM Migrations** | Regex | Django migrations (CreateModel, ForeignKey), Alembic (op.create_table, ForeignKeyConstraint) |
+| **TypeORM** | Regex | @Entity → tables, @Column → columns, @ManyToOne/@OneToMany → edges |
+| **Knex/Sequelize** | Regex | createTable → tables, .references().inTable() → FK edges |
+| **Connection Strings** | Regex | DATABASE_URL → database, REDIS_URL → cache (credentials never stored) |
 | **Docker** | YAML/text | Dockerfile images & ports, docker-compose services, depends_on edges |
+| **Swift** | Regex | SwiftUI views, structs, ObservableObject classes, protocols, SPM targets |
+| **Rust** | Regex | Structs, traits, enums, impl blocks, Actix/Axum routes, Cargo.toml deps |
+| **Go** | Regex | Structs, interfaces, HTTP handlers, packages, go.mod deps |
+| **Config/IaC** | YAML/HCL/text | Kubernetes manifests, Terraform resources, GraphQL schemas, GitHub Actions, .env files |
 
 The scanner respects `.gitignore` and always skips `.git/`, `node_modules/`, `__pycache__/`, `.venv/`.
 
@@ -468,20 +478,20 @@ source .venv/bin/activate
 pytest tests/ -v
 ```
 
-**196 tests** across 17 test files:
+**309 tests** across 17 test files:
 
 | File | Tests | Coverage |
 |------|-------|----------|
 | `test_server.py` | 21 | Node/edge CRUD, blueprint queries, changelog, extended types |
 | `test_templates.py` | 28 | Template loading, validation, application, multi-template |
-| `test_scanner.py` | 23 | Python/JS/Docker scanners, idempotency, edge cases |
+| `test_scanner.py` | 120 | Python/JS/Docker/Swift/Rust/Go/Config/SQL scanners, idempotency, edge cases |
 | `test_analyzer.py` | 20 | All 10 checks with positive and negative cases |
 | `test_tracer.py` | 11 | Entry points, linear flow, branches, cycles, gaps |
 | `test_impact.py` | 6 | Upstream/downstream/both cascade analysis |
 | `test_whatif.py` | 5 | Remove, break, disconnect, overload scenarios |
 | `test_questions.py` | 6 | Security, completeness, data flow gap detection |
 | `test_review.py` | 3 | Review prompt generation |
-| `test_xray.py` | 5 | HTML visualization, themes, D3 embedding |
+| `test_xray.py` | 11 | HTML visualization, themes, D3 embedding, legend, onboarding |
 | `test_snapshots.py` | 6 | Save, restore, compare, confirm safety |
 | `test_export.py` | 5 | Mermaid, Markdown, JSON, CSV, DOT formats |
 | `test_health.py` | 6 | Node scoring, project grades, edge cases |
@@ -543,11 +553,16 @@ blueprint-mcp/
 │   │   ├── python_scanner.py    # AST-based Python analysis
 │   │   ├── javascript_scanner.py # Regex-based JS/TS analysis
 │   │   ├── docker_scanner.py    # Dockerfile + compose parsing
+│   │   ├── swift_scanner.py     # Swift/SwiftUI analysis
+│   │   ├── rust_scanner.py      # Rust analysis
+│   │   ├── go_scanner.py        # Go analysis
+│   │   ├── config_scanner.py    # K8s, Terraform, GraphQL, GitHub Actions
+│   │   ├── sql_scanner.py       # SQL, Prisma, ORM migrations, connection strings
 │   │   └── file_scanner.py      # Project detection + gitignore
 │   └── templates/
 │       ├── registry.py      # Template loading & application
 │       └── *.json           # 6 starter templates
-├── tests/                   # 196 tests across 17 files
+├── tests/                   # 309 tests across 17 files
 │   └── fixtures/            # Sample projects for scanner tests
 ├── viewer/                  # React + ReactFlow frontend (optional)
 └── pyproject.toml           # Python 3.11+, all deps

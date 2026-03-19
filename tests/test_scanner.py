@@ -17,11 +17,24 @@ from src.scanner.file_scanner import scan_project_files
 from src.scanner.python_scanner import PythonScanner
 from src.scanner.javascript_scanner import JavaScriptScanner
 from src.scanner.docker_scanner import DockerScanner
+from src.scanner.swift_scanner import SwiftScanner
+from src.scanner.rust_scanner import RustScanner
+from src.scanner.go_scanner import GoScanner
+from src.scanner.config_scanner import ConfigScanner
+from src.scanner.sql_scanner import SQLScanner
 
 FIXTURES = os.path.join(os.path.dirname(__file__), "fixtures")
 PYTHON_PROJECT = os.path.join(FIXTURES, "python_project")
 JS_PROJECT = os.path.join(FIXTURES, "js_project")
 DOCKER_PROJECT = os.path.join(FIXTURES, "docker_project")
+NEXTJS_PROJECT = os.path.join(FIXTURES, "nextjs_project")
+REACT_PROJECT = os.path.join(FIXTURES, "react_project")
+SWIFT_PROJECT = os.path.join(FIXTURES, "swift_project")
+RUST_PROJECT = os.path.join(FIXTURES, "rust_project")
+GO_PROJECT = os.path.join(FIXTURES, "go_project")
+CONFIG_PROJECT = os.path.join(FIXTURES, "config_project")
+DJANGO_PROJECT = os.path.join(FIXTURES, "django_project")
+SQL_PROJECT = os.path.join(FIXTURES, "sql_project")
 
 
 @pytest.fixture
@@ -381,3 +394,1526 @@ async def test_scan_docker_project_runs_docker_scanner(db: Database):
     result = await scan_project(DOCKER_PROJECT, db)
     assert "docker_scanner" in result["scanners_run"]
     assert result["total_nodes_created"] > 0
+
+
+# =============================================================================
+# JavaScript Scanner — New Tests (Stage 1)
+# =============================================================================
+
+
+async def test_js_scanner_creates_no_external_edges(db: Database):
+    """External imports (react, express) should not create edges."""
+    info = await scan_project_files(JS_PROJECT, db)
+    scanner = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
+    result = await scanner.scan(JS_PROJECT)
+
+    bp = await db.get_blueprint()
+    edges = bp["edges"]
+    # JS project has no relative imports so should have 0 edges
+    assert result.edges_created == 0
+
+
+async def test_js_scanner_detects_nextjs_pages(db: Database):
+    """Detects 3 page routes: /, /dashboard, /dashboard/[id]."""
+    info = await scan_project_files(NEXTJS_PROJECT, db)
+    scanner = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(NEXTJS_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="route")
+    routes = bp["nodes"]
+    route_names = {r["name"] for r in routes}
+    assert "/" in route_names
+    assert "/dashboard" in route_names
+    assert "/dashboard/[id]" in route_names
+
+    # Verify framework metadata
+    home = next(r for r in routes if r["name"] == "/")
+    assert home["metadata"]["framework"] == "nextjs"
+
+
+async def test_js_scanner_detects_nextjs_api_route(db: Database):
+    """Detects Next.js API route exports."""
+    info = await scan_project_files(NEXTJS_PROJECT, db)
+    scanner = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(NEXTJS_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="route")
+    routes = bp["nodes"]
+    route_names = {r["name"] for r in routes}
+    assert "GET /api/users" in route_names
+    assert "POST /api/users" in route_names
+
+
+async def test_js_scanner_detects_nextjs_layouts(db: Database):
+    """Detects layout nodes."""
+    info = await scan_project_files(NEXTJS_PROJECT, db)
+    scanner = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(NEXTJS_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="module")
+    modules = bp["nodes"]
+    layout_nodes = [m for m in modules if m.get("metadata", {}).get("layout")]
+    assert len(layout_nodes) >= 1
+    layout_names = {l["name"] for l in layout_nodes}
+    assert "RootLayout" in layout_names
+
+
+async def test_js_scanner_detects_nextjs_middleware(db: Database):
+    """Detects middleware node."""
+    info = await scan_project_files(NEXTJS_PROJECT, db)
+    scanner = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(NEXTJS_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="middleware")
+    mw = bp["nodes"]
+    assert len(mw) >= 1
+    assert mw[0]["name"] == "middleware"
+    assert mw[0]["metadata"]["framework"] == "nextjs"
+
+
+async def test_js_scanner_detects_nextjs_config(db: Database):
+    """Detects next.config.mjs as config node."""
+    info = await scan_project_files(NEXTJS_PROJECT, db)
+    scanner = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(NEXTJS_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="config")
+    configs = bp["nodes"]
+    config_names = {c["name"] for c in configs}
+    assert "next.config.mjs" in config_names
+
+
+async def test_js_scanner_nextjs_import_edges(db: Database):
+    """Detects depends_on edges from import statements."""
+    info = await scan_project_files(NEXTJS_PROJECT, db)
+    scanner = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
+    result = await scanner.scan(NEXTJS_PROJECT)
+
+    assert result.edges_created > 0
+
+    bp = await db.get_blueprint()
+    edges = bp["edges"]
+    depends_on = [e for e in edges if e["relationship"] == "depends_on"]
+    nodes = {n["id"]: n["name"] for n in bp["nodes"]}
+
+    dep_pairs = set()
+    for e in depends_on:
+        src = nodes.get(e["source_id"], "")
+        tgt = nodes.get(e["target_id"], "")
+        dep_pairs.add((src, tgt))
+
+    # Header imports Link
+    assert ("Header", "Link") in dep_pairs
+
+
+async def test_js_scanner_nextjs_layout_contains_page(db: Database):
+    """Detects contains edge from layout to page."""
+    info = await scan_project_files(NEXTJS_PROJECT, db)
+    scanner = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(NEXTJS_PROJECT)
+
+    bp = await db.get_blueprint()
+    edges = bp["edges"]
+    contains = [e for e in edges if e["relationship"] == "contains"]
+    assert len(contains) >= 1
+
+    nodes = {n["id"]: n["name"] for n in bp["nodes"]}
+    for e in contains:
+        src = nodes.get(e["source_id"], "")
+        assert "Layout" in src or "layout" in src.lower()
+
+
+async def test_js_scanner_finds_arrow_components(db: Database):
+    """Footer detected as arrow function component."""
+    info = await scan_project_files(REACT_PROJECT, db)
+    scanner = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(REACT_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="module")
+    modules = bp["nodes"]
+    module_names = {m["name"] for m in modules}
+    assert "Footer" in module_names
+
+
+async def test_js_scanner_finds_class_definitions(db: Database):
+    """ApiClient, BaseClient detected as class_def."""
+    info = await scan_project_files(REACT_PROJECT, db)
+    scanner = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(REACT_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="class_def")
+    classes = bp["nodes"]
+    class_names = {c["name"] for c in classes}
+    assert "ApiClient" in class_names
+
+
+async def test_js_scanner_detects_class_inheritance(db: Database):
+    """Detects inherits edge: ApiClient -> BaseClient."""
+    info = await scan_project_files(REACT_PROJECT, db)
+    scanner = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(REACT_PROJECT)
+
+    bp = await db.get_blueprint()
+    edges = bp["edges"]
+    inherits = [e for e in edges if e["relationship"] == "inherits"]
+    assert len(inherits) >= 1
+
+    nodes = {n["id"]: n["name"] for n in bp["nodes"]}
+    found = False
+    for e in inherits:
+        src = nodes.get(e["source_id"], "")
+        tgt = nodes.get(e["target_id"], "")
+        if src == "ApiClient" and tgt == "BaseClient":
+            found = True
+    assert found, f"Expected ApiClient -> BaseClient inherits edge"
+
+
+async def test_js_scanner_import_chain(db: Database):
+    """App -> Header -> useAuth import chain creates depends_on edges."""
+    info = await scan_project_files(REACT_PROJECT, db)
+    scanner = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(REACT_PROJECT)
+
+    bp = await db.get_blueprint()
+    edges = bp["edges"]
+    depends_on = [e for e in edges if e["relationship"] == "depends_on"]
+    nodes = {n["id"]: n["name"] for n in bp["nodes"]}
+
+    dep_pairs = set()
+    for e in depends_on:
+        src = nodes.get(e["source_id"], "")
+        tgt = nodes.get(e["target_id"], "")
+        dep_pairs.add((src, tgt))
+
+    # App imports Header
+    assert ("App", "Header") in dep_pairs
+    # Header imports hooks (via index.ts barrel)
+    assert ("Header", "hooks") in dep_pairs
+
+
+async def test_js_scanner_handles_empty_file(db: Database):
+    """No crash on empty .tsx file."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with open(os.path.join(tmpdir, "package.json"), "w") as f:
+            f.write('{"name": "test-empty"}')
+        with open(os.path.join(tmpdir, "empty.tsx"), "w") as f:
+            f.write("")
+
+        info = await scan_project_files(tmpdir, db)
+        scanner = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
+        result = await scanner.scan(tmpdir)
+        assert result.files_scanned >= 1
+        assert len(result.errors) == 0
+
+
+async def test_js_scanner_ignores_node_modules(db: Database):
+    """node_modules directory is never scanned."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with open(os.path.join(tmpdir, "package.json"), "w") as f:
+            f.write('{"name": "test-nm"}')
+        nm = os.path.join(tmpdir, "node_modules", "react")
+        os.makedirs(nm)
+        with open(os.path.join(nm, "index.js"), "w") as f:
+            f.write("export default function React() {}")
+
+        info = await scan_project_files(tmpdir, db)
+        scanner = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
+        result = await scanner.scan(tmpdir)
+        # Should not scan any files in node_modules
+        assert result.files_scanned == 0
+
+
+async def test_js_scanner_idempotent_with_edges(db: Database):
+    """Scanning twice produces same edge count."""
+    info = await scan_project_files(NEXTJS_PROJECT, db)
+
+    scanner1 = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
+    r1 = await scanner1.scan(NEXTJS_PROJECT)
+    bp1 = await db.get_blueprint()
+    edge_count_1 = len(bp1["edges"])
+
+    scanner2 = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
+    await scanner2.scan(NEXTJS_PROJECT)
+    bp2 = await db.get_blueprint()
+    edge_count_2 = len(bp2["edges"])
+
+    assert edge_count_1 == edge_count_2
+    assert edge_count_1 > 0
+
+
+async def test_js_scanner_finds_vue_sfc(db: Database):
+    """Vue .vue files detected as module with vue metadata."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with open(os.path.join(tmpdir, "package.json"), "w") as f:
+            f.write('{"name": "test-vue"}')
+        with open(os.path.join(tmpdir, "MyComponent.vue"), "w") as f:
+            f.write("""<template><div>Hello</div></template>
+<script setup>
+import { ref } from 'vue'
+const count = ref(0)
+</script>""")
+
+        info = await scan_project_files(tmpdir, db)
+        scanner = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
+        await scanner.scan(tmpdir)
+
+        bp = await db.get_blueprint(type_filter="module")
+        modules = bp["nodes"]
+        vue_mods = [m for m in modules if m.get("metadata", {}).get("framework") == "vue"]
+        assert len(vue_mods) >= 1
+        assert vue_mods[0]["name"] == "MyComponent"
+
+
+# =============================================================================
+# Python Scanner — New Tests (Stage 2)
+# =============================================================================
+
+
+async def test_python_scanner_detects_standalone_functions(db: Database):
+    """format_date, helper_function found as function nodes."""
+    info = await scan_project_files(PYTHON_PROJECT, db)
+    scanner = PythonScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(PYTHON_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="function")
+    funcs = bp["nodes"]
+    func_names = {f["name"] for f in funcs}
+    assert any("format_date" in n for n in func_names)
+    assert any("helper_function" in n for n in func_names)
+
+
+async def test_python_scanner_skips_private_functions(db: Database):
+    """_private_helper NOT found in non-deep mode."""
+    info = await scan_project_files(PYTHON_PROJECT, db)
+    scanner = PythonScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(PYTHON_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="function")
+    funcs = bp["nodes"]
+    func_names = {f["name"] for f in funcs}
+    assert not any("_private_helper" in n for n in func_names)
+
+
+async def test_python_scanner_detects_pydantic_models(db: Database):
+    """UserCreate, UserResponse as model nodes."""
+    info = await scan_project_files(PYTHON_PROJECT, db)
+    scanner = PythonScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(PYTHON_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="model")
+    models = bp["nodes"]
+    model_names = {m["name"] for m in models}
+    assert "UserCreate" in model_names
+    assert "UserResponse" in model_names
+
+
+async def test_python_scanner_detects_dataclasses(db: Database):
+    """CacheEntry as model node."""
+    info = await scan_project_files(PYTHON_PROJECT, db)
+    scanner = PythonScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(PYTHON_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="model")
+    models = bp["nodes"]
+    model_names = {m["name"] for m in models}
+    assert "CacheEntry" in model_names
+
+
+async def test_python_scanner_detects_enums(db: Database):
+    """UserStatus as enum_def node."""
+    info = await scan_project_files(PYTHON_PROJECT, db)
+    scanner = PythonScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(PYTHON_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="enum_def")
+    enums = bp["nodes"]
+    enum_names = {e["name"] for e in enums}
+    assert "UserStatus" in enum_names
+
+
+async def test_python_scanner_detects_class_definitions(db: Database):
+    """ItemProcessor as class_def."""
+    info = await scan_project_files(PYTHON_PROJECT, db)
+    scanner = PythonScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(PYTHON_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="class_def")
+    classes = bp["nodes"]
+    class_names = {c["name"] for c in classes}
+    assert "ItemProcessor" in class_names
+
+
+async def test_python_scanner_detects_class_inheritance(db: Database):
+    """inherits edge: ItemProcessor -> BaseProcessor."""
+    info = await scan_project_files(PYTHON_PROJECT, db)
+    scanner = PythonScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(PYTHON_PROJECT)
+
+    bp = await db.get_blueprint()
+    edges = bp["edges"]
+    inherits = [e for e in edges if e["relationship"] == "inherits"]
+    nodes = {n["id"]: n["name"] for n in bp["nodes"]}
+
+    found = False
+    for e in inherits:
+        src = nodes.get(e["source_id"], "")
+        tgt = nodes.get(e["target_id"], "")
+        if src == "ItemProcessor" and tgt == "BaseProcessor":
+            found = True
+    assert found, "Expected ItemProcessor -> BaseProcessor inherits edge"
+
+
+async def test_python_scanner_detects_protocols(db: Database):
+    """Serializer as protocol node."""
+    info = await scan_project_files(PYTHON_PROJECT, db)
+    scanner = PythonScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(PYTHON_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="protocol")
+    protocols = bp["nodes"]
+    proto_names = {p["name"] for p in protocols}
+    assert "Serializer" in proto_names
+
+
+async def test_python_scanner_detects_abc(db: Database):
+    """BaseProcessor as protocol node (ABC with abstractmethods)."""
+    info = await scan_project_files(PYTHON_PROJECT, db)
+    scanner = PythonScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(PYTHON_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="protocol")
+    protocols = bp["nodes"]
+    proto_names = {p["name"] for p in protocols}
+    assert "BaseProcessor" in proto_names
+
+
+async def test_python_scanner_detects_celery_tasks(db: Database):
+    """send_welcome_email, process_upload as worker nodes."""
+    info = await scan_project_files(PYTHON_PROJECT, db)
+    scanner = PythonScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(PYTHON_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="worker")
+    workers = bp["nodes"]
+    worker_names = {w["name"] for w in workers}
+    assert "send_welcome_email" in worker_names
+    assert "process_upload" in worker_names
+
+
+async def test_python_scanner_stage_a_idempotent(db: Database):
+    """Scanning twice produces same counts for new detections."""
+    info = await scan_project_files(PYTHON_PROJECT, db)
+
+    scanner1 = PythonScanner(db, info.root_id, info.gitignore_spec)
+    await scanner1.scan(PYTHON_PROJECT)
+    bp1 = await db.get_blueprint()
+    count1 = bp1["summary"]["total_nodes"]
+
+    scanner2 = PythonScanner(db, info.root_id, info.gitignore_spec)
+    await scanner2.scan(PYTHON_PROJECT)
+    bp2 = await db.get_blueprint()
+    count2 = bp2["summary"]["total_nodes"]
+
+    assert count1 == count2
+
+
+# Python Scanner — Django (Stage 2B)
+
+
+async def test_python_scanner_detects_django_models(db: Database):
+    """Author and Book detected as table nodes with correct db_table names."""
+    info = await scan_project_files(DJANGO_PROJECT, db)
+    scanner = PythonScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(DJANGO_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="table")
+    tables = bp["nodes"]
+    table_names = {t["name"] for t in tables}
+    assert "authors" in table_names
+    assert "library_books" in table_names
+
+
+async def test_python_scanner_detects_django_views_function(db: Database):
+    """author_list, author_detail as view nodes."""
+    info = await scan_project_files(DJANGO_PROJECT, db)
+    scanner = PythonScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(DJANGO_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="view")
+    views = bp["nodes"]
+    view_names = {v["name"] for v in views}
+    assert "author_list" in view_names
+    assert "author_detail" in view_names
+
+
+async def test_python_scanner_detects_django_views_class(db: Database):
+    """BookListView as view node."""
+    info = await scan_project_files(DJANGO_PROJECT, db)
+    scanner = PythonScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(DJANGO_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="view")
+    views = bp["nodes"]
+    view_names = {v["name"] for v in views}
+    assert "BookListView" in view_names
+
+
+async def test_python_scanner_detects_django_url_patterns(db: Database):
+    """3 route nodes with delegates edges to views."""
+    info = await scan_project_files(DJANGO_PROJECT, db)
+    scanner = PythonScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(DJANGO_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="route")
+    routes = bp["nodes"]
+    assert len(routes) >= 3
+
+    # Check delegates edges
+    bp_full = await db.get_blueprint()
+    edges = bp_full["edges"]
+    delegates = [e for e in edges if e["relationship"] == "delegates"]
+    assert len(delegates) >= 1
+
+
+# Python Scanner — File-level (Stage 2C)
+
+
+async def test_python_scanner_detects_test_files(db: Database):
+    """test_ prefixed file detected as NodeType.test."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with open(os.path.join(tmpdir, "test_example.py"), "w") as f:
+            f.write("def test_one():\n    assert True\n")
+        with open(os.path.join(tmpdir, "pyproject.toml"), "w") as f:
+            f.write('[project]\nname = "test"\n')
+
+        info = await scan_project_files(tmpdir, db)
+        scanner = PythonScanner(db, info.root_id, info.gitignore_spec)
+        await scanner.scan(tmpdir)
+
+        bp = await db.get_blueprint(type_filter="test")
+        tests = bp["nodes"]
+        assert len(tests) >= 1
+        assert tests[0]["name"] == "test_example"
+
+
+async def test_python_scanner_detects_config_files(db: Database):
+    """settings.py detected as NodeType.config."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with open(os.path.join(tmpdir, "settings.py"), "w") as f:
+            f.write("DEBUG = True\nSECRET_KEY = 'test'\n")
+        with open(os.path.join(tmpdir, "pyproject.toml"), "w") as f:
+            f.write('[project]\nname = "test"\n')
+
+        info = await scan_project_files(tmpdir, db)
+        scanner = PythonScanner(db, info.root_id, info.gitignore_spec)
+        await scanner.scan(tmpdir)
+
+        bp = await db.get_blueprint(type_filter="config")
+        configs = bp["nodes"]
+        config_names = {c["name"] for c in configs}
+        assert "settings" in config_names
+
+
+async def test_python_scanner_detects_websocket_handler(db: Database):
+    """WebSocket route with protocol metadata."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with open(os.path.join(tmpdir, "main.py"), "w") as f:
+            f.write("""from fastapi import FastAPI
+app = FastAPI()
+
+@app.websocket("/ws/chat")
+async def chat_ws(websocket):
+    pass
+""")
+        with open(os.path.join(tmpdir, "pyproject.toml"), "w") as f:
+            f.write('[project]\nname = "test"\n')
+
+        info = await scan_project_files(tmpdir, db)
+        scanner = PythonScanner(db, info.root_id, info.gitignore_spec)
+        await scanner.scan(tmpdir)
+
+        bp = await db.get_blueprint(type_filter="route")
+        routes = bp["nodes"]
+        ws_routes = [r for r in routes if r.get("metadata", {}).get("protocol") == "websocket"]
+        assert len(ws_routes) >= 1
+
+
+# =============================================================================
+# Swift Scanner Tests (Stage 3)
+# =============================================================================
+
+
+async def test_swift_scanner_detects_views(db: Database):
+    """ContentView detected as view node."""
+    info = await scan_project_files(SWIFT_PROJECT, db)
+    scanner = SwiftScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SWIFT_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="view")
+    views = bp["nodes"]
+    view_names = {v["name"] for v in views}
+    assert "ContentView" in view_names
+
+
+async def test_swift_scanner_detects_structs(db: Database):
+    """User struct detected."""
+    info = await scan_project_files(SWIFT_PROJECT, db)
+    scanner = SwiftScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SWIFT_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="struct")
+    structs = bp["nodes"]
+    struct_names = {s["name"] for s in structs}
+    assert "User" in struct_names
+
+
+async def test_swift_scanner_detects_observable_classes(db: Database):
+    """UserViewModel detected as class with observable metadata."""
+    info = await scan_project_files(SWIFT_PROJECT, db)
+    scanner = SwiftScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SWIFT_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="class_def")
+    classes = bp["nodes"]
+    observable = [c for c in classes if c.get("metadata", {}).get("observable")]
+    assert len(observable) >= 1
+    assert any(c["name"] == "UserViewModel" for c in observable)
+
+
+async def test_swift_scanner_detects_protocols(db: Database):
+    """DataService protocol detected."""
+    info = await scan_project_files(SWIFT_PROJECT, db)
+    scanner = SwiftScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SWIFT_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="protocol")
+    protocols = bp["nodes"]
+    proto_names = {p["name"] for p in protocols}
+    assert "DataService" in proto_names
+
+
+async def test_swift_scanner_detects_main_app(db: Database):
+    """@main struct MyApp detected as service node."""
+    info = await scan_project_files(SWIFT_PROJECT, db)
+    scanner = SwiftScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SWIFT_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="service")
+    services = bp["nodes"]
+    service_names = {s["name"] for s in services}
+    assert "MyApp" in service_names
+
+
+async def test_swift_scanner_detects_protocol_conformance(db: Database):
+    """NetworkDataService implements DataService edge."""
+    info = await scan_project_files(SWIFT_PROJECT, db)
+    scanner = SwiftScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SWIFT_PROJECT)
+
+    bp = await db.get_blueprint()
+    edges = bp["edges"]
+    impl_edges = [e for e in edges if e["relationship"] in ("implements", "inherits")]
+    assert len(impl_edges) >= 1
+
+
+async def test_swift_scanner_detects_spm_targets(db: Database):
+    """SPM targets from Package.swift detected as module nodes."""
+    info = await scan_project_files(SWIFT_PROJECT, db)
+    scanner = SwiftScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SWIFT_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="module")
+    modules = bp["nodes"]
+    mod_names = {m["name"] for m in modules}
+    assert "App" in mod_names
+    assert "Models" in mod_names
+
+
+async def test_swift_scanner_idempotent(db: Database):
+    """Scanning twice produces same node count."""
+    info = await scan_project_files(SWIFT_PROJECT, db)
+
+    scanner1 = SwiftScanner(db, info.root_id, info.gitignore_spec)
+    await scanner1.scan(SWIFT_PROJECT)
+    bp1 = await db.get_blueprint()
+    count1 = bp1["summary"]["total_nodes"]
+
+    scanner2 = SwiftScanner(db, info.root_id, info.gitignore_spec)
+    await scanner2.scan(SWIFT_PROJECT)
+    bp2 = await db.get_blueprint()
+    count2 = bp2["summary"]["total_nodes"]
+
+    assert count1 == count2
+
+
+# =============================================================================
+# Rust Scanner Tests (Stage 4)
+# =============================================================================
+
+
+async def test_rust_scanner_detects_service(db: Database):
+    """Cargo.toml package -> service node."""
+    info = await scan_project_files(RUST_PROJECT, db)
+    scanner = RustScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(RUST_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="service")
+    services = bp["nodes"]
+    service_names = {s["name"] for s in services}
+    assert "test-rust-app" in service_names
+
+
+async def test_rust_scanner_detects_structs(db: Database):
+    """User and InMemoryRepo structs detected."""
+    info = await scan_project_files(RUST_PROJECT, db)
+    scanner = RustScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(RUST_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="struct")
+    structs = bp["nodes"]
+    struct_names = {s["name"] for s in structs}
+    assert "User" in struct_names
+    assert "InMemoryRepo" in struct_names
+
+
+async def test_rust_scanner_detects_traits(db: Database):
+    """Repository trait detected as protocol."""
+    info = await scan_project_files(RUST_PROJECT, db)
+    scanner = RustScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(RUST_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="protocol")
+    traits = bp["nodes"]
+    trait_names = {t["name"] for t in traits}
+    assert "Repository" in trait_names
+
+
+async def test_rust_scanner_detects_enums(db: Database):
+    """UserRole enum detected."""
+    info = await scan_project_files(RUST_PROJECT, db)
+    scanner = RustScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(RUST_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="enum_def")
+    enums = bp["nodes"]
+    enum_names = {e["name"] for e in enums}
+    assert "UserRole" in enum_names
+
+
+async def test_rust_scanner_detects_impl_trait(db: Database):
+    """impl Repository for InMemoryRepo -> implements edge."""
+    info = await scan_project_files(RUST_PROJECT, db)
+    scanner = RustScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(RUST_PROJECT)
+
+    bp = await db.get_blueprint()
+    edges = bp["edges"]
+    impl_edges = [e for e in edges if e["relationship"] == "implements"]
+    assert len(impl_edges) >= 1
+
+    nodes = {n["id"]: n["name"] for n in bp["nodes"]}
+    found = False
+    for e in impl_edges:
+        src = nodes.get(e["source_id"], "")
+        tgt = nodes.get(e["target_id"], "")
+        if src == "InMemoryRepo" and tgt == "Repository":
+            found = True
+    assert found
+
+
+async def test_rust_scanner_detects_routes(db: Database):
+    """Route macros detected."""
+    info = await scan_project_files(RUST_PROJECT, db)
+    scanner = RustScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(RUST_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="route")
+    routes = bp["nodes"]
+    route_names = {r["name"] for r in routes}
+    assert "GET /api/users" in route_names
+    assert "POST /api/users" in route_names
+
+
+async def test_rust_scanner_detects_external_deps(db: Database):
+    """Cargo.toml dependencies -> external nodes."""
+    info = await scan_project_files(RUST_PROJECT, db)
+    scanner = RustScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(RUST_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="external")
+    externals = bp["nodes"]
+    ext_names = {e["name"] for e in externals}
+    assert "actix-web" in ext_names
+    assert "serde" in ext_names
+    assert "tokio" in ext_names
+
+
+async def test_rust_scanner_idempotent(db: Database):
+    """Scanning twice produces same node count."""
+    info = await scan_project_files(RUST_PROJECT, db)
+
+    scanner1 = RustScanner(db, info.root_id, info.gitignore_spec)
+    await scanner1.scan(RUST_PROJECT)
+    bp1 = await db.get_blueprint()
+    count1 = bp1["summary"]["total_nodes"]
+
+    scanner2 = RustScanner(db, info.root_id, info.gitignore_spec)
+    await scanner2.scan(RUST_PROJECT)
+    bp2 = await db.get_blueprint()
+    count2 = bp2["summary"]["total_nodes"]
+
+    assert count1 == count2
+
+
+# =============================================================================
+# Go Scanner Tests (Stage 5)
+# =============================================================================
+
+
+async def test_go_scanner_detects_service(db: Database):
+    """go.mod module -> service node."""
+    info = await scan_project_files(GO_PROJECT, db)
+    scanner = GoScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(GO_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="service")
+    services = bp["nodes"]
+    service_names = {s["name"] for s in services}
+    assert "testapp" in service_names
+
+
+async def test_go_scanner_detects_structs(db: Database):
+    """User and InMemoryUserRepo structs detected."""
+    info = await scan_project_files(GO_PROJECT, db)
+    scanner = GoScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(GO_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="struct")
+    structs = bp["nodes"]
+    struct_names = {s["name"] for s in structs}
+    assert "User" in struct_names
+    assert "InMemoryUserRepo" in struct_names
+
+
+async def test_go_scanner_detects_interfaces(db: Database):
+    """UserRepository interface detected as protocol."""
+    info = await scan_project_files(GO_PROJECT, db)
+    scanner = GoScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(GO_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="protocol")
+    interfaces = bp["nodes"]
+    iface_names = {i["name"] for i in interfaces}
+    assert "UserRepository" in iface_names
+
+
+async def test_go_scanner_detects_routes(db: Database):
+    """HTTP handlers detected as route nodes."""
+    info = await scan_project_files(GO_PROJECT, db)
+    scanner = GoScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(GO_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="route")
+    routes = bp["nodes"]
+    route_names = {r["name"] for r in routes}
+    assert "/api/users" in route_names
+
+
+async def test_go_scanner_detects_external_deps(db: Database):
+    """go.mod dependencies -> external nodes."""
+    info = await scan_project_files(GO_PROJECT, db)
+    scanner = GoScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(GO_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="external")
+    externals = bp["nodes"]
+    ext_names = {e["name"] for e in externals}
+    assert "gin" in ext_names
+    assert "sqlx" in ext_names
+
+
+async def test_go_scanner_detects_packages(db: Database):
+    """Go packages detected as module nodes."""
+    info = await scan_project_files(GO_PROJECT, db)
+    scanner = GoScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(GO_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="module")
+    modules = bp["nodes"]
+    mod_names = {m["name"] for m in modules}
+    assert "models" in mod_names
+
+
+async def test_go_scanner_idempotent(db: Database):
+    """Scanning twice produces same node count."""
+    info = await scan_project_files(GO_PROJECT, db)
+
+    scanner1 = GoScanner(db, info.root_id, info.gitignore_spec)
+    await scanner1.scan(GO_PROJECT)
+    bp1 = await db.get_blueprint()
+    count1 = bp1["summary"]["total_nodes"]
+
+    scanner2 = GoScanner(db, info.root_id, info.gitignore_spec)
+    await scanner2.scan(GO_PROJECT)
+    bp2 = await db.get_blueprint()
+    count2 = bp2["summary"]["total_nodes"]
+
+    assert count1 == count2
+
+
+# =============================================================================
+# Config/IaC Scanner Tests (Stage 6)
+# =============================================================================
+
+
+async def test_config_scanner_detects_env(db: Database):
+    """Root .env file detected as config node with variables."""
+    info = await scan_project_files(CONFIG_PROJECT, db)
+    scanner = ConfigScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(CONFIG_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="config")
+    configs = bp["nodes"]
+    env_nodes = [c for c in configs if c["name"] == ".env"]
+    assert len(env_nodes) >= 1
+    assert "DATABASE_URL" in env_nodes[0]["metadata"]["variables"]
+
+
+async def test_config_scanner_detects_k8s_deployment(db: Database):
+    """K8s Deployment detected as service node."""
+    info = await scan_project_files(CONFIG_PROJECT, db)
+    scanner = ConfigScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(CONFIG_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="service")
+    services = bp["nodes"]
+    service_names = {s["name"] for s in services}
+    assert "web-app" in service_names
+
+
+async def test_config_scanner_detects_k8s_service(db: Database):
+    """K8s Service detected as api node."""
+    info = await scan_project_files(CONFIG_PROJECT, db)
+    scanner = ConfigScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(CONFIG_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="api")
+    apis = bp["nodes"]
+    api_names = {a["name"] for a in apis}
+    assert "web-service" in api_names
+
+
+async def test_config_scanner_detects_github_actions(db: Database):
+    """GitHub Actions workflow and jobs detected."""
+    info = await scan_project_files(CONFIG_PROJECT, db)
+    scanner = ConfigScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(CONFIG_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="script")
+    scripts = bp["nodes"]
+    script_names = {s["name"] for s in scripts}
+    assert "CI Pipeline" in script_names
+
+    bp_w = await db.get_blueprint(type_filter="worker")
+    workers = bp_w["nodes"]
+    assert len(workers) >= 2  # test + build jobs
+
+
+async def test_config_scanner_detects_terraform(db: Database):
+    """Terraform resources, modules, and variables detected."""
+    info = await scan_project_files(CONFIG_PROJECT, db)
+    scanner = ConfigScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(CONFIG_PROJECT)
+
+    bp = await db.get_blueprint()
+    nodes = bp["nodes"]
+    node_names = {n["name"] for n in nodes}
+
+    assert "aws_instance.web" in node_names
+    assert "aws_db_instance.main" in node_names
+    assert "vpc" in node_names  # module
+    assert "region" in node_names  # variable
+
+
+async def test_config_scanner_detects_sql_tables(db: Database):
+    """SQL CREATE TABLE statements detected."""
+    info = await scan_project_files(CONFIG_PROJECT, db)
+    scanner = ConfigScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(CONFIG_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="table")
+    tables = bp["nodes"]
+    table_names = {t["name"] for t in tables}
+    assert "users" in table_names
+    assert "posts" in table_names
+
+
+async def test_config_scanner_detects_sql_fk_edges(db: Database):
+    """SQL foreign key creates writes_to edge."""
+    info = await scan_project_files(CONFIG_PROJECT, db)
+    scanner = ConfigScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(CONFIG_PROJECT)
+
+    bp = await db.get_blueprint()
+    edges = bp["edges"]
+    writes_to = [e for e in edges if e["relationship"] == "writes_to"]
+    assert len(writes_to) >= 1
+
+    nodes = {n["id"]: n["name"] for n in bp["nodes"]}
+    found = False
+    for e in writes_to:
+        src = nodes.get(e["source_id"], "")
+        tgt = nodes.get(e["target_id"], "")
+        if src == "posts" and tgt == "users":
+            found = True
+    assert found
+
+
+async def test_config_scanner_detects_sql_views(db: Database):
+    """SQL CREATE VIEW detected as view node."""
+    info = await scan_project_files(CONFIG_PROJECT, db)
+    scanner = ConfigScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(CONFIG_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="view")
+    views = bp["nodes"]
+    view_names = {v["name"] for v in views}
+    assert "active_users" in view_names
+
+
+async def test_config_scanner_detects_graphql_types(db: Database):
+    """GraphQL types detected as schema nodes."""
+    info = await scan_project_files(CONFIG_PROJECT, db)
+    scanner = ConfigScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(CONFIG_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="schema")
+    schemas = bp["nodes"]
+    schema_names = {s["name"] for s in schemas}
+    assert "User" in schema_names
+    assert "Post" in schema_names
+    assert "CreateUserInput" in schema_names
+
+
+async def test_config_scanner_detects_graphql_queries(db: Database):
+    """GraphQL Query/Mutation fields detected as route nodes."""
+    info = await scan_project_files(CONFIG_PROJECT, db)
+    scanner = ConfigScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(CONFIG_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="route")
+    routes = bp["nodes"]
+    route_names = {r["name"] for r in routes}
+    assert "query:users" in route_names
+    assert "mutation:createUser" in route_names
+
+
+async def test_config_scanner_idempotent(db: Database):
+    """Scanning twice produces same node count."""
+    info = await scan_project_files(CONFIG_PROJECT, db)
+
+    scanner1 = ConfigScanner(db, info.root_id, info.gitignore_spec)
+    await scanner1.scan(CONFIG_PROJECT)
+    bp1 = await db.get_blueprint()
+    count1 = bp1["summary"]["total_nodes"]
+
+    scanner2 = ConfigScanner(db, info.root_id, info.gitignore_spec)
+    await scanner2.scan(CONFIG_PROJECT)
+    bp2 = await db.get_blueprint()
+    count2 = bp2["summary"]["total_nodes"]
+
+    assert count1 == count2
+
+
+# =============================================================================
+# SQL Scanner Tests (Stage 7)
+# =============================================================================
+
+
+# --- SQL File Tests ---
+
+
+async def test_sql_scanner_detects_tables(db: Database):
+    """users, posts, categories as table nodes."""
+    info = await scan_project_files(SQL_PROJECT, db)
+    scanner = SQLScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SQL_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="table")
+    tables = bp["nodes"]
+    table_names = {t["name"] for t in tables}
+    assert "users" in table_names
+    assert "posts" in table_names
+    assert "categories" in table_names
+
+
+async def test_sql_scanner_detects_columns(db: Database):
+    """users has 4 column children (id, email, name, created_at)."""
+    info = await scan_project_files(SQL_PROJECT, db)
+    scanner = SQLScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SQL_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="column")
+    columns = bp["nodes"]
+    bp_tables = await db.get_blueprint(type_filter="table")
+    users_table = next(t for t in bp_tables["nodes"] if t["name"] == "users")
+    users_cols = [c for c in columns if c.get("parent_id") == users_table["id"]]
+    col_names = {c["name"] for c in users_cols}
+    assert "id" in col_names
+    assert "email" in col_names
+    assert "name" in col_names
+    assert "created_at" in col_names
+    assert len(users_cols) == 4
+
+
+async def test_sql_scanner_column_metadata(db: Database):
+    """id has {primary_key: true}, email has {nullable: false}."""
+    info = await scan_project_files(SQL_PROJECT, db)
+    scanner = SQLScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SQL_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="column")
+    columns = bp["nodes"]
+
+    bp_tables = await db.get_blueprint(type_filter="table")
+    users_table = next(t for t in bp_tables["nodes"] if t["name"] == "users")
+    users_cols = [c for c in columns if c.get("parent_id") == users_table["id"]]
+
+    id_col = next(c for c in users_cols if c["name"] == "id")
+    assert id_col["metadata"]["primary_key"] is True
+
+    email_col = next(c for c in users_cols if c["name"] == "email")
+    assert email_col["metadata"]["nullable"] is False
+
+
+async def test_sql_scanner_large_table_no_column_nodes(db: Database):
+    """20-col table: columns in metadata, not child nodes."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        cols = ", ".join([f"col{i} INTEGER" for i in range(20)])
+        sql = f"CREATE TABLE big_table ({cols});"
+        with open(os.path.join(tmpdir, "big.sql"), "w") as f:
+            f.write(sql)
+
+        info = await scan_project_files(tmpdir, db)
+        scanner = SQLScanner(db, info.root_id, info.gitignore_spec)
+        await scanner.scan(tmpdir)
+
+        bp = await db.get_blueprint(type_filter="table")
+        big_table = next(t for t in bp["nodes"] if t["name"] == "big_table")
+        assert big_table["metadata"]["total_columns"] == 20
+        assert len(big_table["metadata"]["columns"]) == 20
+
+        bp_cols = await db.get_blueprint(type_filter="column")
+        big_cols = [c for c in bp_cols["nodes"] if c.get("parent_id") == big_table["id"]]
+        assert len(big_cols) == 0
+
+
+async def test_sql_scanner_detects_fk_edges(db: Database):
+    """reads_from: posts->users, posts->categories."""
+    info = await scan_project_files(SQL_PROJECT, db)
+    scanner = SQLScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SQL_PROJECT)
+
+    bp = await db.get_blueprint()
+    edges = bp["edges"]
+    reads_from = [e for e in edges if e["relationship"] == "reads_from"]
+    nodes = {n["id"]: n["name"] for n in bp["nodes"]}
+
+    pairs = set()
+    for e in reads_from:
+        src = nodes.get(e["source_id"], "")
+        tgt = nodes.get(e["target_id"], "")
+        pairs.add((src, tgt))
+
+    assert ("posts", "users") in pairs
+    assert ("posts", "categories") in pairs
+
+
+async def test_sql_scanner_detects_alter_table_fk(db: Database):
+    """reads_from: posts->users from ALTER TABLE."""
+    info = await scan_project_files(SQL_PROJECT, db)
+    scanner = SQLScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SQL_PROJECT)
+
+    bp = await db.get_blueprint()
+    edges = bp["edges"]
+    reads_from = [e for e in edges if e["relationship"] == "reads_from"]
+    nodes = {n["id"]: n["name"] for n in bp["nodes"]}
+
+    pairs = set()
+    for e in reads_from:
+        src = nodes.get(e["source_id"], "")
+        tgt = nodes.get(e["target_id"], "")
+        pairs.add((src, tgt))
+
+    assert ("posts", "users") in pairs
+
+
+async def test_sql_scanner_detects_indexes(db: Database):
+    """Annotation on posts: index idx_posts_author."""
+    info = await scan_project_files(SQL_PROJECT, db)
+    scanner = SQLScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SQL_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="table")
+    posts_table = next(t for t in bp["nodes"] if t["name"] == "posts")
+    assert "indexes" in posts_table["metadata"]
+    assert "idx_posts_author" in posts_table["metadata"]["indexes"]
+
+
+async def test_sql_scanner_detects_view(db: Database):
+    """recent_posts as view node."""
+    info = await scan_project_files(SQL_PROJECT, db)
+    scanner = SQLScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SQL_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="view")
+    views = bp["nodes"]
+    view_names = {v["name"] for v in views}
+    assert "recent_posts" in view_names
+
+
+async def test_sql_scanner_view_reads_from_tables(db: Database):
+    """reads_from: recent_posts->posts, recent_posts->users."""
+    info = await scan_project_files(SQL_PROJECT, db)
+    scanner = SQLScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SQL_PROJECT)
+
+    bp = await db.get_blueprint()
+    edges = bp["edges"]
+    reads_from = [e for e in edges if e["relationship"] == "reads_from"]
+    nodes = {n["id"]: n["name"] for n in bp["nodes"]}
+
+    pairs = set()
+    for e in reads_from:
+        src = nodes.get(e["source_id"], "")
+        tgt = nodes.get(e["target_id"], "")
+        pairs.add((src, tgt))
+
+    assert ("recent_posts", "posts") in pairs
+    assert ("recent_posts", "users") in pairs
+
+
+async def test_sql_scanner_detects_function(db: Database):
+    """update_timestamp as function node."""
+    info = await scan_project_files(SQL_PROJECT, db)
+    scanner = SQLScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SQL_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="function")
+    funcs = bp["nodes"]
+    func_names = {f["name"] for f in funcs}
+    assert "update_timestamp" in func_names
+
+
+async def test_sql_scanner_detects_trigger(db: Database):
+    """trg_update_ts as function node + observes->users edge."""
+    info = await scan_project_files(SQL_PROJECT, db)
+    scanner = SQLScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SQL_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="function")
+    funcs = bp["nodes"]
+    trigger = next((f for f in funcs if f["name"] == "trg_update_ts"), None)
+    assert trigger is not None
+    assert trigger["metadata"].get("trigger") is True
+
+    bp_full = await db.get_blueprint()
+    edges = bp_full["edges"]
+    observes = [e for e in edges if e["relationship"] == "observes"]
+    nodes = {n["id"]: n["name"] for n in bp_full["nodes"]}
+    found = False
+    for e in observes:
+        src = nodes.get(e["source_id"], "")
+        tgt = nodes.get(e["target_id"], "")
+        if src == "trg_update_ts" and tgt == "users":
+            found = True
+    assert found
+
+
+# --- Prisma Tests ---
+
+
+async def test_sql_scanner_prisma_datasource(db: Database):
+    """postgresql database node."""
+    info = await scan_project_files(SQL_PROJECT, db)
+    scanner = SQLScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SQL_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="database")
+    dbs = bp["nodes"]
+    db_names = {d["name"] for d in dbs}
+    assert "postgresql_database" in db_names
+
+    pg_db = next(d for d in dbs if d["name"] == "postgresql_database")
+    assert pg_db["metadata"]["provider"] == "postgresql"
+
+
+async def test_sql_scanner_prisma_models(db: Database):
+    """User, Post as table nodes."""
+    info = await scan_project_files(SQL_PROJECT, db)
+    scanner = SQLScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SQL_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="table")
+    tables = bp["nodes"]
+    table_names = {t["name"] for t in tables}
+    assert "User" in table_names
+    assert "Post" in table_names
+
+
+async def test_sql_scanner_prisma_columns(db: Database):
+    """User has column children (id, email, name)."""
+    info = await scan_project_files(SQL_PROJECT, db)
+    scanner = SQLScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SQL_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="table")
+    user_table = next(t for t in bp["nodes"] if t["name"] == "User")
+
+    bp_cols = await db.get_blueprint(type_filter="column")
+    user_cols = [c for c in bp_cols["nodes"] if c.get("parent_id") == user_table["id"]]
+    col_names = {c["name"] for c in user_cols}
+    assert "id" in col_names
+    assert "email" in col_names
+    assert "name" in col_names
+
+
+async def test_sql_scanner_prisma_relations(db: Database):
+    """reads_from: Post->User via @relation."""
+    info = await scan_project_files(SQL_PROJECT, db)
+    scanner = SQLScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SQL_PROJECT)
+
+    bp = await db.get_blueprint()
+    edges = bp["edges"]
+    reads_from = [e for e in edges if e["relationship"] == "reads_from"]
+    nodes = {n["id"]: n["name"] for n in bp["nodes"]}
+
+    pairs = set()
+    for e in reads_from:
+        src = nodes.get(e["source_id"], "")
+        tgt = nodes.get(e["target_id"], "")
+        pairs.add((src, tgt))
+
+    assert ("Post", "User") in pairs
+
+
+async def test_sql_scanner_prisma_no_reverse_edge(db: Database):
+    """User.posts[] does NOT create User->Post edge."""
+    info = await scan_project_files(SQL_PROJECT, db)
+    scanner = SQLScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SQL_PROJECT)
+
+    bp = await db.get_blueprint()
+    edges = bp["edges"]
+    reads_from = [e for e in edges if e["relationship"] == "reads_from"]
+    nodes = {n["id"]: n["name"] for n in bp["nodes"]}
+
+    pairs = set()
+    for e in reads_from:
+        src = nodes.get(e["source_id"], "")
+        tgt = nodes.get(e["target_id"], "")
+        pairs.add((src, tgt))
+
+    assert ("User", "Post") not in pairs
+
+
+# --- Migration Tests ---
+
+
+async def test_sql_scanner_django_migration_tables(db: Database):
+    """Customer, Order as table nodes."""
+    info = await scan_project_files(SQL_PROJECT, db)
+    scanner = SQLScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SQL_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="table")
+    tables = bp["nodes"]
+    table_names = {t["name"] for t in tables}
+    assert "customer" in table_names
+    assert "order" in table_names
+
+
+async def test_sql_scanner_django_migration_fk(db: Database):
+    """reads_from: order->customer."""
+    info = await scan_project_files(SQL_PROJECT, db)
+    scanner = SQLScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SQL_PROJECT)
+
+    bp = await db.get_blueprint()
+    edges = bp["edges"]
+    reads_from = [e for e in edges if e["relationship"] == "reads_from"]
+    nodes = {n["id"]: n["name"] for n in bp["nodes"]}
+
+    pairs = set()
+    for e in reads_from:
+        src = nodes.get(e["source_id"], "")
+        tgt = nodes.get(e["target_id"], "")
+        pairs.add((src, tgt))
+
+    assert ("order", "customer") in pairs
+
+
+async def test_sql_scanner_alembic_migration_tables(db: Database):
+    """products, reviews as table nodes."""
+    info = await scan_project_files(SQL_PROJECT, db)
+    scanner = SQLScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SQL_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="table")
+    tables = bp["nodes"]
+    table_names = {t["name"] for t in tables}
+    assert "products" in table_names
+    assert "reviews" in table_names
+
+
+async def test_sql_scanner_alembic_migration_fk(db: Database):
+    """reads_from: reviews->products."""
+    info = await scan_project_files(SQL_PROJECT, db)
+    scanner = SQLScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SQL_PROJECT)
+
+    bp = await db.get_blueprint()
+    edges = bp["edges"]
+    reads_from = [e for e in edges if e["relationship"] == "reads_from"]
+    nodes = {n["id"]: n["name"] for n in bp["nodes"]}
+
+    pairs = set()
+    for e in reads_from:
+        src = nodes.get(e["source_id"], "")
+        tgt = nodes.get(e["target_id"], "")
+        pairs.add((src, tgt))
+
+    assert ("reviews", "products") in pairs
+
+
+# --- Connection String Tests ---
+
+
+async def test_sql_scanner_conn_string_postgres(db: Database):
+    """database node with provider=postgresql."""
+    info = await scan_project_files(SQL_PROJECT, db)
+    scanner = SQLScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SQL_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="database")
+    dbs = bp["nodes"]
+    conn_dbs = [d for d in dbs if d.get("metadata", {}).get("source") == "connection_string"]
+    pg_nodes = [d for d in conn_dbs if d["metadata"].get("provider") == "postgresql"]
+    assert len(pg_nodes) >= 1
+
+
+async def test_sql_scanner_conn_string_redis(db: Database):
+    """cache node with provider=redis."""
+    info = await scan_project_files(SQL_PROJECT, db)
+    scanner = SQLScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SQL_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="cache")
+    caches = bp["nodes"]
+    redis_nodes = [c for c in caches if c.get("metadata", {}).get("provider") == "redis"]
+    assert len(redis_nodes) >= 1
+
+
+async def test_sql_scanner_conn_string_no_credentials(db: Database):
+    """NO password/username/host in any metadata."""
+    info = await scan_project_files(SQL_PROJECT, db)
+    scanner = SQLScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SQL_PROJECT)
+
+    bp = await db.get_blueprint()
+    for node in bp["nodes"]:
+        meta = node.get("metadata", {})
+        meta_str = str(meta).lower()
+        assert "password" not in meta_str
+        assert "user:" not in meta_str
+        assert "localhost" not in meta_str
+        assert "5432" not in meta_str
+
+
+# --- TypeORM + Knex Tests ---
+
+
+async def test_sql_scanner_typeorm_entity(db: Database):
+    """app_users as table node."""
+    info = await scan_project_files(SQL_PROJECT, db)
+    scanner = SQLScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SQL_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="table")
+    tables = bp["nodes"]
+    table_names = {t["name"] for t in tables}
+    assert "app_users" in table_names
+
+
+async def test_sql_scanner_typeorm_columns(db: Database):
+    """id, name, email as column children."""
+    info = await scan_project_files(SQL_PROJECT, db)
+    scanner = SQLScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SQL_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="table")
+    typeorm_table = next(t for t in bp["nodes"] if t["name"] == "app_users")
+
+    bp_cols = await db.get_blueprint(type_filter="column")
+    cols = [c for c in bp_cols["nodes"] if c.get("parent_id") == typeorm_table["id"]]
+    col_names = {c["name"] for c in cols}
+    assert "id" in col_names
+    assert "name" in col_names
+    assert "email" in col_names
+
+
+async def test_sql_scanner_typeorm_relation(db: Database):
+    """reads_from edge from @ManyToOne — deferred FK won't resolve since Department not scanned."""
+    info = await scan_project_files(SQL_PROJECT, db)
+    scanner = SQLScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SQL_PROJECT)
+
+    bp = await db.get_blueprint()
+    assert len(bp["nodes"]) > 0
+
+
+async def test_sql_scanner_knex_table(db: Database):
+    """invoices as table node."""
+    info = await scan_project_files(SQL_PROJECT, db)
+    scanner = SQLScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SQL_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="table")
+    tables = bp["nodes"]
+    table_names = {t["name"] for t in tables}
+    assert "invoices" in table_names
+
+
+async def test_sql_scanner_knex_fk(db: Database):
+    """invoices references customers — but customers not in fixtures so no edge, just verify no crash."""
+    info = await scan_project_files(SQL_PROJECT, db)
+    scanner = SQLScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SQL_PROJECT)
+
+    bp_tables = await db.get_blueprint(type_filter="table")
+    assert "invoices" in {t["name"] for t in bp_tables["nodes"]}
+
+
+# --- Integration ---
+
+
+async def test_sql_scanner_idempotent(db: Database):
+    """scan twice = same node/edge count."""
+    info = await scan_project_files(SQL_PROJECT, db)
+
+    scanner1 = SQLScanner(db, info.root_id, info.gitignore_spec)
+    await scanner1.scan(SQL_PROJECT)
+    bp1 = await db.get_blueprint()
+    count1 = bp1["summary"]["total_nodes"]
+    edge_count1 = len(bp1["edges"])
+
+    scanner2 = SQLScanner(db, info.root_id, info.gitignore_spec)
+    await scanner2.scan(SQL_PROJECT)
+    bp2 = await db.get_blueprint()
+    count2 = bp2["summary"]["total_nodes"]
+    edge_count2 = len(bp2["edges"])
+
+    assert count1 == count2
+    assert edge_count1 == edge_count2

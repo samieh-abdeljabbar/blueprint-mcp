@@ -18,6 +18,11 @@ LANGUAGE_INDICATORS = {
     "python": ["pyproject.toml", "setup.py", "setup.cfg", "requirements.txt", "Pipfile"],
     "javascript": ["package.json", "yarn.lock", "pnpm-lock.yaml"],
     "docker": ["Dockerfile", "docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"],
+    "swift": ["Package.swift", "Podfile", "Cartfile"],
+    "rust": ["Cargo.toml", "Cargo.lock"],
+    "go": ["go.mod", "go.sum"],
+    "config": [".env", "main.tf", "variables.tf"],
+    "sql": ["schema.prisma"],
 }
 
 
@@ -70,6 +75,19 @@ def _detect_languages(project_path: str) -> list[str]:
     for lang, indicators in LANGUAGE_INDICATORS.items():
         if any(ind in entries for ind in indicators):
             languages.append(lang)
+
+    # Detect sql language from directory presence
+    if "sql" not in languages:
+        sql_dirs = {"prisma", "migrations", "alembic"}
+        if sql_dirs & entries:
+            languages.append("sql")
+        else:
+            # Check for .sql files at root
+            for entry in entries:
+                if entry.endswith(".sql"):
+                    languages.append("sql")
+                    break
+
     return languages
 
 

@@ -1,4 +1,4 @@
-"""JavaScript/TypeScript scanner — regex-based analysis."""
+"""JavaScript/TypeScript scanner — regex-based analysis with import edges."""
 
 from __future__ import annotations
 
@@ -8,36 +8,57 @@ import re
 import time
 
 from src.models import (
+    EdgeCreateInput,
+    EdgeRelationship,
     NodeCreateInput,
     NodeStatus,
     NodeType,
     ScanResult,
 )
 from src.scanner.base import BaseScanner
-
-# Regex patterns for route detection
-# Matches: app.get('/path', ...), router.post('/path', ...) etc.
-ROUTE_PATTERN = re.compile(
-    r"""(?:app|router|server)\.(get|post|put|delete|patch)\(\s*['"]([^'"]+)['"]""",
-    re.IGNORECASE,
+from src.scanner.js_frameworks import (
+    detect_nextjs_layout,
+    detect_nextjs_middleware,
+    detect_nextjs_route,
+    detect_nuxt_route,
+    detect_vue_sfc,
 )
-
-# React component patterns
-# export default function ComponentName
-REACT_EXPORT_DEFAULT = re.compile(
-    r"""export\s+default\s+function\s+(\w+)"""
+from src.scanner.js_import_resolver import (
+    extract_import_paths,
+    module_name_from_path,
+    resolve_import_path,
 )
-# export function ComponentName (PascalCase = component)
-REACT_EXPORT_NAMED = re.compile(
-    r"""export\s+function\s+([A-Z]\w+)"""
+from src.scanner.js_patterns import (
+    CLASS_EXTENDS,
+    CLASS_STANDALONE,
+    CONFIG_FILES,
+    DRIZZLE_TABLE,
+    JS_EXTENSIONS,
+    MIDDLEWARE_USE,
+    NEXTJS_API_EXPORT,
+    PRISMA_MODEL,
+    REACT_ARROW_COMPONENT,
+    REACT_EXPORT_DEFAULT,
+    REACT_EXPORT_NAMED,
+    ROUTE_PATTERN,
+    TYPEORM_ENTITY,
 )
-
-JS_EXTENSIONS = {".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"}
 
 
 class JavaScriptScanner(BaseScanner):
     async def scan(self, path: str) -> ScanResult:
         start = time.time()
+        # Track module node IDs by relative path for import edge creation
+        self._module_node_ids: dict[str, str] = {}
+        # Track layout node IDs by directory for contains edges
+        self._layout_node_ids: dict[str, str] = {}
+        # Track page node IDs by directory for contains edges
+        self._page_node_ids: dict[str, list[str]] = {}
+        # Track class node IDs by name for inheritance edges
+        self._class_node_ids: dict[str, str] = {}
+        # Deferred edges to create after all files scanned
+        self._deferred_import_edges: list[tuple[str, str]] = []
+        self._deferred_inherit_edges: list[tuple[str, str]] = []
 
         # Read package.json first for service node
         await self._scan_package_json(path)
@@ -48,13 +69,20 @@ class JavaScriptScanner(BaseScanner):
             ]
             for fname in filenames:
                 ext = os.path.splitext(fname)[1]
-                if ext not in JS_EXTENSIONS:
-                    continue
                 full = os.path.join(dirpath, fname)
+
                 if self.should_ignore(full, path):
                     continue
-                await self._scan_file(full, path)
-                self._files_scanned += 1
+
+                if ext in JS_EXTENSIONS or fname.endswith(".vue"):
+                    await self._scan_file(full, path)
+                    self._files_scanned += 1
+                elif fname.endswith(".prisma"):
+                    await self._scan_prisma_file(full, path)
+                    self._files_scanned += 1
+
+        # Create deferred edges
+        await self._create_deferred_edges()
 
         return self._build_result("javascript_scanner", start)
 
@@ -87,7 +115,22 @@ class JavaScriptScanner(BaseScanner):
             self._add_error(rel_path, str(e))
             return
 
-        # Detect routes
+        # Check for framework-specific file conventions
+        await self._detect_framework_conventions(rel_path, source, filepath, project_root)
+
+        # Detect config files
+        basename = os.path.basename(filepath)
+        if basename in CONFIG_FILES:
+            await self._track_node(NodeCreateInput(
+                name=basename,
+                type=NodeType.config,
+                status=NodeStatus.built,
+                parent_id=self.root_id,
+                metadata={"config_type": os.path.splitext(basename)[0]},
+                source_file=rel_path,
+            ))
+
+        # Detect Express/Fastify routes
         for match in ROUTE_PATTERN.finditer(source):
             method = match.group(1).upper()
             route_path = match.group(2)
@@ -98,17 +141,183 @@ class JavaScriptScanner(BaseScanner):
                 type=NodeType.route,
                 status=NodeStatus.built,
                 parent_id=self.root_id,
-                metadata={"method": method, "path": route_path},
+                metadata={"method": method, "path": route_path, "framework": "express"},
                 source_file=rel_path,
                 source_line=line,
             ))
 
-        # Detect React components
-        for pattern in (REACT_EXPORT_DEFAULT, REACT_EXPORT_NAMED):
-            for match in pattern.finditer(source):
-                comp_name = match.group(1)
+        # Detect React components (all patterns)
+        await self._detect_components(source, rel_path)
+
+        # Detect class definitions and inheritance
+        await self._detect_classes(source, rel_path)
+
+        # Detect middleware (app.use)
+        await self._detect_middleware(source, rel_path)
+
+        # Detect Drizzle tables
+        for match in DRIZZLE_TABLE.finditer(source):
+            table_name = match.group(1)
+            line = source[:match.start()].count("\n") + 1
+            await self._track_node(NodeCreateInput(
+                name=table_name,
+                type=NodeType.table,
+                status=NodeStatus.built,
+                parent_id=self.root_id,
+                metadata={"source": "drizzle"},
+                source_file=rel_path,
+                source_line=line,
+            ))
+
+        # Detect TypeORM entities
+        for match in TYPEORM_ENTITY.finditer(source):
+            entity_name = match.group(1)
+            if entity_name:
                 line = source[:match.start()].count("\n") + 1
                 await self._track_node(NodeCreateInput(
+                    name=entity_name.lower(),
+                    type=NodeType.table,
+                    status=NodeStatus.built,
+                    parent_id=self.root_id,
+                    metadata={"source": "typeorm"},
+                    source_file=rel_path,
+                    source_line=line,
+                ))
+
+        # Detect Vue SFCs
+        if filepath.endswith(".vue"):
+            vue_info = detect_vue_sfc(rel_path)
+            if vue_info:
+                node_id, _ = await self._track_node(NodeCreateInput(
+                    name=vue_info["name"],
+                    type=NodeType.module,
+                    status=NodeStatus.built,
+                    parent_id=self.root_id,
+                    metadata={"framework": "vue", "component": True},
+                    source_file=rel_path,
+                ))
+                self._module_node_ids[rel_path] = node_id
+
+        # Detect import edges
+        await self._detect_imports(source, filepath, rel_path, project_root)
+
+    async def _detect_framework_conventions(
+        self, rel_path: str, source: str, filepath: str, project_root: str
+    ):
+        """Detect Next.js/Nuxt route conventions from file paths."""
+
+        # Next.js App Router pages and API routes
+        route_info = detect_nextjs_route(rel_path)
+        if route_info:
+            if route_info["type"] == "api":
+                # Detect exported HTTP method handlers
+                methods = NEXTJS_API_EXPORT.findall(source)
+                if methods:
+                    for method in methods:
+                        route_name = f"{method.upper()} {route_info['route']}"
+                        await self._track_node(NodeCreateInput(
+                            name=route_name,
+                            type=NodeType.route,
+                            status=NodeStatus.built,
+                            parent_id=self.root_id,
+                            metadata={
+                                "method": method.upper(),
+                                "path": route_info["route"],
+                                "framework": "nextjs",
+                                "router": route_info["router"],
+                                "api": True,
+                            },
+                            source_file=rel_path,
+                        ))
+                else:
+                    # No explicit exports — create a generic route
+                    await self._track_node(NodeCreateInput(
+                        name=route_info["route"],
+                        type=NodeType.route,
+                        status=NodeStatus.built,
+                        parent_id=self.root_id,
+                        metadata={
+                            "path": route_info["route"],
+                            "framework": "nextjs",
+                            "router": route_info["router"],
+                            "api": True,
+                        },
+                        source_file=rel_path,
+                    ))
+            else:
+                # Page route
+                node_id, _ = await self._track_node(NodeCreateInput(
+                    name=route_info["route"],
+                    type=NodeType.route,
+                    status=NodeStatus.built,
+                    parent_id=self.root_id,
+                    metadata={
+                        "path": route_info["route"],
+                        "framework": "nextjs",
+                        "router": route_info["router"],
+                    },
+                    source_file=rel_path,
+                ))
+                # Track for layout->page contains edges
+                page_dir = os.path.dirname(rel_path)
+                self._page_node_ids.setdefault(page_dir, []).append(node_id)
+
+        # Nuxt pages
+        nuxt_info = detect_nuxt_route(rel_path)
+        if nuxt_info:
+            await self._track_node(NodeCreateInput(
+                name=nuxt_info["route"],
+                type=NodeType.route,
+                status=NodeStatus.built,
+                parent_id=self.root_id,
+                metadata={
+                    "path": nuxt_info["route"],
+                    "framework": "nuxt",
+                },
+                source_file=rel_path,
+            ))
+
+        # Next.js layouts
+        layout_info = detect_nextjs_layout(rel_path)
+        if layout_info:
+            node_id, _ = await self._track_node(NodeCreateInput(
+                name=layout_info["name"],
+                type=NodeType.module,
+                status=NodeStatus.built,
+                parent_id=self.root_id,
+                metadata={
+                    "framework": "nextjs",
+                    "layout": True,
+                },
+                source_file=rel_path,
+            ))
+            layout_dir = os.path.dirname(rel_path)
+            self._layout_node_ids[layout_dir] = node_id
+
+        # Next.js middleware
+        if detect_nextjs_middleware(rel_path):
+            await self._track_node(NodeCreateInput(
+                name="middleware",
+                type=NodeType.middleware,
+                status=NodeStatus.built,
+                parent_id=self.root_id,
+                metadata={"framework": "nextjs"},
+                source_file=rel_path,
+            ))
+
+    async def _detect_components(self, source: str, rel_path: str):
+        """Detect React components from export patterns."""
+        seen_names: set[str] = set()
+
+        for pattern in (REACT_EXPORT_DEFAULT, REACT_EXPORT_NAMED, REACT_ARROW_COMPONENT):
+            for match in pattern.finditer(source):
+                comp_name = match.group(1)
+                if comp_name in seen_names:
+                    continue
+                seen_names.add(comp_name)
+
+                line = source[:match.start()].count("\n") + 1
+                node_id, _ = await self._track_node(NodeCreateInput(
                     name=comp_name,
                     type=NodeType.module,
                     status=NodeStatus.built,
@@ -117,18 +326,161 @@ class JavaScriptScanner(BaseScanner):
                     source_file=rel_path,
                     source_line=line,
                 ))
+                self._module_node_ids[rel_path] = node_id
 
-        # Detect Prisma models in .prisma files
-        if filepath.endswith(".prisma"):
-            for match in re.finditer(r"model\s+(\w+)\s*\{", source):
-                model_name = match.group(1)
-                line = source[:match.start()].count("\n") + 1
-                await self._track_node(NodeCreateInput(
-                    name=model_name.lower(),
-                    type=NodeType.table,
+    async def _detect_classes(self, source: str, rel_path: str):
+        """Detect class definitions and inheritance."""
+        seen_classes: set[str] = set()
+
+        # Classes with extends (creates inheritance edge)
+        for match in CLASS_EXTENDS.finditer(source):
+            child_name = match.group(1)
+            parent_name = match.group(2)
+            line = source[:match.start()].count("\n") + 1
+            seen_classes.add(child_name)
+
+            child_id, _ = await self._track_node(NodeCreateInput(
+                name=child_name,
+                type=NodeType.class_def,
+                status=NodeStatus.built,
+                parent_id=self.root_id,
+                metadata={"extends": parent_name},
+                source_file=rel_path,
+                source_line=line,
+            ))
+            self._class_node_ids[child_name] = child_id
+            self._deferred_inherit_edges.append((child_name, parent_name))
+
+        # Standalone classes (no extends)
+        for match in CLASS_STANDALONE.finditer(source):
+            class_name = match.group(1)
+            if class_name in seen_classes:
+                continue
+            seen_classes.add(class_name)
+            line = source[:match.start()].count("\n") + 1
+
+            node_id, _ = await self._track_node(NodeCreateInput(
+                name=class_name,
+                type=NodeType.class_def,
+                status=NodeStatus.built,
+                parent_id=self.root_id,
+                source_file=rel_path,
+                source_line=line,
+            ))
+            self._class_node_ids[class_name] = node_id
+
+    async def _detect_middleware(self, source: str, rel_path: str):
+        """Detect Express-style middleware usage."""
+        for match in MIDDLEWARE_USE.finditer(source):
+            mw_name = match.group(1)
+            # Skip common non-middleware patterns
+            if mw_name in ("express", "cors", "helmet", "morgan", "path"):
+                continue
+            line = source[:match.start()].count("\n") + 1
+            await self._track_node(NodeCreateInput(
+                name=mw_name,
+                type=NodeType.middleware,
+                status=NodeStatus.built,
+                parent_id=self.root_id,
+                metadata={"framework": "express"},
+                source_file=rel_path,
+                source_line=line,
+            ))
+
+    async def _detect_imports(
+        self, source: str, filepath: str, rel_path: str, project_root: str
+    ):
+        """Detect import statements and create depends_on edges for local imports."""
+        import_paths = extract_import_paths(source)
+
+        for import_path in import_paths:
+            resolved = resolve_import_path(import_path, filepath, project_root)
+            if resolved is None:
+                continue
+
+            # Ensure source module node exists
+            if rel_path not in self._module_node_ids:
+                src_name = module_name_from_path(rel_path)
+                src_id, _ = await self._track_node(NodeCreateInput(
+                    name=src_name,
+                    type=NodeType.module,
                     status=NodeStatus.built,
                     parent_id=self.root_id,
-                    metadata={"orm_class": model_name, "source": "prisma"},
                     source_file=rel_path,
-                    source_line=line,
+                ))
+                self._module_node_ids[rel_path] = src_id
+
+            # Ensure target module node exists
+            if resolved not in self._module_node_ids:
+                tgt_name = module_name_from_path(resolved)
+                tgt_id, _ = await self._track_node(NodeCreateInput(
+                    name=tgt_name,
+                    type=NodeType.module,
+                    status=NodeStatus.built,
+                    parent_id=self.root_id,
+                    source_file=resolved,
+                ))
+                self._module_node_ids[resolved] = tgt_id
+
+            self._deferred_import_edges.append((rel_path, resolved))
+
+    async def _scan_prisma_file(self, filepath: str, project_root: str):
+        """Scan .prisma files for model definitions."""
+        rel_path = os.path.relpath(filepath, project_root)
+        try:
+            with open(filepath) as f:
+                source = f.read()
+        except OSError as e:
+            self._add_error(rel_path, str(e))
+            return
+
+        for match in PRISMA_MODEL.finditer(source):
+            model_name = match.group(1)
+            line = source[:match.start()].count("\n") + 1
+            await self._track_node(NodeCreateInput(
+                name=model_name.lower(),
+                type=NodeType.table,
+                status=NodeStatus.built,
+                parent_id=self.root_id,
+                metadata={"orm_class": model_name, "source": "prisma"},
+                source_file=rel_path,
+                source_line=line,
+            ))
+
+    async def _create_deferred_edges(self):
+        """Create all deferred edges after scanning is complete."""
+        # Import edges
+        seen_edges: set[tuple[str, str]] = set()
+        for src_path, tgt_path in self._deferred_import_edges:
+            src_id = self._module_node_ids.get(src_path)
+            tgt_id = self._module_node_ids.get(tgt_path)
+            if src_id and tgt_id and src_id != tgt_id:
+                edge_key = (src_id, tgt_id)
+                if edge_key not in seen_edges:
+                    seen_edges.add(edge_key)
+                    await self._track_edge(EdgeCreateInput(
+                        source_id=src_id,
+                        target_id=tgt_id,
+                        relationship=EdgeRelationship.depends_on,
+                    ))
+
+        # Inheritance edges
+        for child_name, parent_name in self._deferred_inherit_edges:
+            child_id = self._class_node_ids.get(child_name)
+            parent_id = self._class_node_ids.get(parent_name)
+            if child_id and parent_id:
+                await self._track_edge(EdgeCreateInput(
+                    source_id=child_id,
+                    target_id=parent_id,
+                    relationship=EdgeRelationship.inherits,
+                ))
+
+        # Layout -> page contains edges
+        for layout_dir, layout_id in self._layout_node_ids.items():
+            page_ids = self._page_node_ids.get(layout_dir, [])
+            for page_id in page_ids:
+                await self._track_edge(EdgeCreateInput(
+                    source_id=layout_id,
+                    target_id=page_id,
+                    relationship=EdgeRelationship.contains,
                 ))

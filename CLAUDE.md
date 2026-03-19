@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-Blueprint MCP is a Model Context Protocol server that maintains a living architectural map of any software project. It tracks components (services, databases, APIs, routes, functions, etc.), their connections, and build status via a local SQLite database. Currently exposes **38 MCP tools** with **196 tests**.
+Blueprint MCP is a Model Context Protocol server that maintains a living architectural map of any software project. It tracks components (services, databases, APIs, routes, functions, etc.), their connections, and build status via a local SQLite database. Currently exposes **38 MCP tools** with **309 tests**.
 
 ## Key Commands
 
@@ -44,7 +44,7 @@ The server follows a layered pattern: **MCP tools** (server.py) -> **domain logi
 
 | Module | Purpose |
 |---|---|
-| `src/scanner/` | Codebase analysis. `BaseScanner` ABC with dedup tracking. Python (AST), JS/TS (regex), Docker (YAML), file (project detection). Orchestrated by `scan_project()` in `__init__.py`. |
+| `src/scanner/` | Codebase analysis. `BaseScanner` ABC with dedup tracking. Python (AST), JS/TS (regex), Docker (YAML), SQL/Prisma/ORM (regex), Swift, Rust, Go, Config/IaC, file (project detection). Orchestrated by `scan_project()` in `__init__.py`. |
 | `src/templates/registry.py` | Template loading/validation/application. Auto-discovers `*.json` from `src/templates/`. Ref strings -> UUIDs on apply. |
 | `src/analyzer.py` | 10 graph checks (orphaned tables, circular deps via DFS, SPOF via Tarjan's, missing auth, stale nodes, etc.) |
 | `src/tracer.py` | Flow tracing from entry points. BFS with gap detection (dead ends, unprotected writes). |

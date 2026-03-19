@@ -1,0 +1,3 @@
+[project]
+name = "test-django"
+dependencies = ["django>=4.2"]
