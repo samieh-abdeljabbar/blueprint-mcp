@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import csv
+import io
+import json
+
 from src.db import Database
 
 
@@ -170,3 +174,108 @@ def _render_md_tree(node, all_nodes, indent: int) -> list[str]:
     for child in children:
         lines.extend(_render_md_tree(child, all_nodes, indent + 1))
     return lines
+
+
+async def export_json(db: Database, scope: str | None = None) -> dict:
+    """Export the blueprint as a JSON document."""
+    nodes = await db.get_all_nodes()
+    edges = await db.get_all_edges()
+
+    if scope:
+        subtree_ids = _get_subtree_ids(scope, nodes)
+        nodes = [n for n in nodes if n.id in subtree_ids]
+        edge_ids = {n.id for n in nodes}
+        edges = [e for e in edges if e.source_id in edge_ids and e.target_id in edge_ids]
+
+    content = json.dumps(
+        {
+            "nodes": [n.model_dump() for n in nodes],
+            "edges": [e.model_dump() for e in edges],
+        },
+        indent=2,
+    )
+
+    return {
+        "format": "json",
+        "content": content,
+        "node_count": len(nodes),
+        "edge_count": len(edges),
+    }
+
+
+async def export_csv(db: Database, scope: str | None = None) -> dict:
+    """Export the blueprint nodes as a CSV document."""
+    nodes = await db.get_all_nodes()
+
+    if scope:
+        subtree_ids = _get_subtree_ids(scope, nodes)
+        nodes = [n for n in nodes if n.id in subtree_ids]
+
+    output = io.StringIO(newline="")
+    writer = csv.writer(output, lineterminator="\n")
+    writer.writerow(["id", "name", "type", "status", "parent_id", "description", "source_file"])
+
+    for n in nodes:
+        writer.writerow([
+            n.id,
+            n.name,
+            n.type.value,
+            n.status.value,
+            n.parent_id or "",
+            n.description or "",
+            n.source_file or "",
+        ])
+
+    csv_string = output.getvalue()
+
+    return {
+        "format": "csv",
+        "content": csv_string,
+        "node_count": len(nodes),
+    }
+
+
+async def export_dot(db: Database, scope: str | None = None) -> dict:
+    """Export the blueprint as a Graphviz DOT graph."""
+    nodes = await db.get_all_nodes()
+    edges = await db.get_all_edges()
+
+    if scope:
+        subtree_ids = _get_subtree_ids(scope, nodes)
+        nodes = [n for n in nodes if n.id in subtree_ids]
+        edge_ids = {n.id for n in nodes}
+        edges = [e for e in edges if e.source_id in edge_ids and e.target_id in edge_ids]
+
+    color_map = {
+        "planned": "gold",
+        "in_progress": "skyblue",
+        "built": "green",
+        "broken": "red",
+        "deprecated": "gray",
+    }
+
+    lines = ["digraph blueprint {", "    rankdir=LR;"]
+
+    for n in nodes:
+        safe = _safe_id(n.id)
+        color = color_map.get(n.status.value, "white")
+        lines.append(
+            f'    {safe} [label="{n.name}" style=filled fillcolor={color}];'
+        )
+
+    for e in edges:
+        src = _safe_id(e.source_id)
+        tgt = _safe_id(e.target_id)
+        label = e.label or e.relationship.value
+        lines.append(f'    {src} -> {tgt} [label="{label}"];')
+
+    lines.append("}")
+
+    dot_string = "\n".join(lines)
+
+    return {
+        "format": "dot",
+        "content": dot_string,
+        "node_count": len(nodes),
+        "edge_count": len(edges),
+    }

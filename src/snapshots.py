@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from src.db import Database
 
 
@@ -107,6 +109,69 @@ async def compare_snapshots(
             "edges_added": len(added_edges),
             "edges_removed": len(removed_edges),
         },
+    }
+
+
+async def restore_snapshot(db: Database, snapshot_id: str, confirm: bool = False) -> dict:
+    """Restore a snapshot, replacing all current nodes and edges."""
+    if confirm is not True:
+        return {"error": "Must pass confirm=True to restore. This replaces all current nodes and edges."}
+
+    snap = await db.get_snapshot(snapshot_id)
+    if not snap:
+        return {"error": f"Snapshot '{snapshot_id}' not found"}
+
+    # Delete all current nodes and edges
+    await db.db.execute("DELETE FROM edges")
+    await db.db.execute("DELETE FROM nodes")
+
+    # Re-insert nodes from snapshot data
+    for node in snap["node_data"]:
+        await db.db.execute(
+            """INSERT INTO nodes (id, name, type, status, parent_id, description, metadata, source_file, source_line, template_origin, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                node["id"],
+                node["name"],
+                node["type"],
+                node["status"],
+                node.get("parent_id"),
+                node.get("description"),
+                json.dumps(node["metadata"]) if node.get("metadata") is not None else None,
+                node.get("source_file"),
+                node.get("source_line"),
+                node.get("template_origin"),
+                node.get("created_at"),
+                node.get("updated_at"),
+            ),
+        )
+
+    # Re-insert edges from snapshot data
+    for edge in snap["edge_data"]:
+        await db.db.execute(
+            """INSERT INTO edges (id, source_id, target_id, relationship, label, metadata, status, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                edge["id"],
+                edge["source_id"],
+                edge["target_id"],
+                edge["relationship"],
+                edge.get("label"),
+                json.dumps(edge["metadata"]) if edge.get("metadata") is not None else None,
+                edge.get("status", "active"),
+                edge.get("created_at"),
+            ),
+        )
+
+    # Log changelog entry and commit
+    await db.log_change("snapshot_restored", "snapshot", snapshot_id, {"name": snap["name"]})
+    await db.db.commit()
+
+    return {
+        "restored": True,
+        "snapshot_name": snap["name"],
+        "node_count": len(snap["node_data"]),
+        "edge_count": len(snap["edge_data"]),
     }
 
 

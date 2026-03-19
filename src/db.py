@@ -82,6 +82,18 @@ CREATE TABLE IF NOT EXISTS snapshots (
     edge_count INTEGER NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS annotations (
+    id TEXT PRIMARY KEY,
+    node_id TEXT NOT NULL,
+    key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (node_id) REFERENCES nodes(id) ON DELETE CASCADE,
+    UNIQUE(node_id, key)
+);
+CREATE INDEX IF NOT EXISTS idx_annotations_node ON annotations(node_id);
+CREATE INDEX IF NOT EXISTS idx_annotations_key ON annotations(key);
 """
 
 
@@ -648,6 +660,57 @@ class Database:
             "total_edges": edge_count,
             "recent_changes": recent_changes,
         }
+
+
+    # --- Annotation CRUD ---
+
+    async def upsert_annotation(self, node_id: str, key: str, value: str) -> dict:
+        """Insert or update an annotation on a node."""
+        # Verify node exists
+        cursor = await self.db.execute("SELECT id FROM nodes WHERE id = ?", (node_id,))
+        if await cursor.fetchone() is None:
+            raise ValueError(f"Node '{node_id}' not found")
+
+        ann_id = _new_id()
+        now = _now()
+        await self.db.execute(
+            """INSERT INTO annotations (id, node_id, key, value, created_at)
+               VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT(node_id, key) DO UPDATE SET value = excluded.value, created_at = excluded.created_at""",
+            (ann_id, node_id, key, value, now),
+        )
+        await self.db.commit()
+        return {"node_id": node_id, "key": key, "value": value}
+
+    async def get_annotations(self, node_id: str | None = None, key: str | None = None) -> list[dict]:
+        """Get annotations filtered by node_id and/or key."""
+        conditions = []
+        params = []
+        if node_id:
+            conditions.append("node_id = ?")
+            params.append(node_id)
+        if key:
+            conditions.append("key = ?")
+            params.append(key)
+
+        where = ""
+        if conditions:
+            where = " WHERE " + " AND ".join(conditions)
+
+        cursor = await self.db.execute(f"SELECT * FROM annotations{where}", params)
+        rows = await cursor.fetchall()
+        return [
+            {"id": r["id"], "node_id": r["node_id"], "key": r["key"], "value": r["value"], "created_at": r["created_at"]}
+            for r in rows
+        ]
+
+    async def delete_annotation(self, node_id: str, key: str) -> bool:
+        """Delete a specific annotation."""
+        cursor = await self.db.execute(
+            "DELETE FROM annotations WHERE node_id = ? AND key = ?", (node_id, key)
+        )
+        await self.db.commit()
+        return cursor.rowcount > 0
 
 
 async def init_db(db_path: str | None = None) -> Database:

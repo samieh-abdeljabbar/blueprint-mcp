@@ -364,6 +364,7 @@ from src.snapshots import (
     snapshot_blueprint as _snapshot_blueprint,
     list_snapshots as _list_snapshots,
     compare_snapshots as _compare_snapshots,
+    restore_snapshot as _restore_snapshot,
 )
 
 
@@ -392,7 +393,13 @@ async def compare_snapshots(
     return await _compare_snapshots(db, snapshot_id, compare_to)
 
 
-from src.export import export_mermaid as _export_mermaid, export_markdown as _export_markdown
+from src.export import (
+    export_mermaid as _export_mermaid,
+    export_markdown as _export_markdown,
+    export_json as _export_json,
+    export_csv as _export_csv,
+    export_dot as _export_dot,
+)
 
 
 @mcp.tool
@@ -407,6 +414,141 @@ async def export_markdown(scope: str | None = None, ctx: Context = None) -> dict
     """Export the blueprint as a structured Markdown document."""
     db = _get_db(ctx)
     return await _export_markdown(db, scope)
+
+
+# --- Phase 6-10: New tools ---
+
+# Phase 6B: Natural Language Query
+
+from src.query import query_blueprint as _query_blueprint
+
+
+@mcp.tool
+async def query_blueprint(question: str, ctx: Context = None) -> dict:
+    """Ask a natural language question about the blueprint — e.g. 'what connects to the database?' or 'show me all routes'."""
+    db = _get_db(ctx)
+    return await _query_blueprint(db, question)
+
+
+# Phase 7A: Restore Snapshot
+
+
+@mcp.tool
+async def restore_snapshot(
+    snapshot_id: str, confirm: bool = False, ctx: Context = None
+) -> dict:
+    """Restore the blueprint to a previous snapshot state. Pass confirm=True to execute."""
+    db = _get_db(ctx)
+    return await _restore_snapshot(db, snapshot_id, confirm)
+
+
+# Phase 8A: Health Scoring
+
+from src.health import health_report as _health_report
+
+
+@mcp.tool
+async def health_report(node_id: str | None = None, ctx: Context = None) -> dict:
+    """Score blueprint health (0-100) for a single node or the whole project."""
+    db = _get_db(ctx)
+    return await _health_report(db, node_id)
+
+
+# Phase 8B: Stale Detection
+
+from src.stale import find_stale as _find_stale
+
+
+@mcp.tool
+async def find_stale(
+    days_threshold: int = 30, check_git: bool = True, ctx: Context = None
+) -> dict:
+    """Detect stale source files, old planned nodes, and missing files."""
+    db = _get_db(ctx)
+    return await _find_stale(db, days_threshold, check_git)
+
+
+# Phase 9A: Additional Export Formats
+
+
+@mcp.tool
+async def export_json(scope: str | None = None, ctx: Context = None) -> dict:
+    """Export the blueprint as a portable JSON blob."""
+    db = _get_db(ctx)
+    return await _export_json(db, scope)
+
+
+@mcp.tool
+async def export_csv(scope: str | None = None, ctx: Context = None) -> dict:
+    """Export the blueprint nodes as CSV."""
+    db = _get_db(ctx)
+    return await _export_csv(db, scope)
+
+
+@mcp.tool
+async def export_dot(scope: str | None = None, ctx: Context = None) -> dict:
+    """Export the blueprint as a Graphviz DOT diagram."""
+    db = _get_db(ctx)
+    return await _export_dot(db, scope)
+
+
+# Phase 9B: Multi-Project Linking
+
+from src.projects import link_projects as _link_projects, get_project_map as _get_project_map
+
+
+@mcp.tool
+async def link_projects(
+    source_project: str,
+    source_node: str,
+    target_project: str,
+    target_node: str,
+    relationship: str,
+    label: str | None = None,
+    ctx: Context = None,
+) -> dict:
+    """Create a cross-project link between nodes in different blueprints."""
+    return await _link_projects(source_project, source_node, target_project, target_node, relationship, label)
+
+
+@mcp.tool
+async def get_project_map(project: str | None = None, ctx: Context = None) -> dict:
+    """Show all linked projects and their cross-project connections."""
+    return await _get_project_map(project)
+
+
+# Phase 10A: Annotations
+
+from src.annotations import (
+    annotate_node as _annotate_node,
+    get_annotations as _get_annotations,
+    cost_report as _cost_report,
+)
+
+
+@mcp.tool
+async def annotate_node(
+    node_id: str, key: str, value: str, ctx: Context = None
+) -> dict:
+    """Add or update an annotation (cost, provider, tier, etc.) on a node."""
+    db = _get_db(ctx)
+    return await _annotate_node(db, node_id, key, value)
+
+
+@mcp.tool
+async def get_annotations(
+    node_id: str | None = None, key: str | None = None, ctx: Context = None
+) -> dict:
+    """Get annotations for a node or all annotations across the project."""
+    db = _get_db(ctx)
+    return await _get_annotations(db, node_id, key)
+
+
+@mcp.tool
+async def cost_report(ctx: Context = None) -> dict:
+    """Summarize all cost-related annotations by provider and node type."""
+    db = _get_db(ctx)
+    return await _cost_report(db)
 
 
 if __name__ == "__main__":

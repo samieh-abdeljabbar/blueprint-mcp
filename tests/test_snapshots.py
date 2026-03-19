@@ -12,7 +12,7 @@ from src.models import (
     NodeType,
     NodeUpdateInput,
 )
-from src.snapshots import snapshot_blueprint, list_snapshots, compare_snapshots
+from src.snapshots import snapshot_blueprint, list_snapshots, compare_snapshots, restore_snapshot
 
 
 @pytest.fixture
@@ -82,3 +82,62 @@ async def test_list_snapshots_count(db: Database):
     result = await list_snapshots(db)
     assert result["total"] == 3
     assert len(result["snapshots"]) == 3
+
+
+async def test_restore_snapshot_full_cycle(db: Database):
+    """Create 2 nodes + 1 edge → snapshot → delete all → restore → verify original IDs preserved."""
+    a = await db.create_node(
+        NodeCreateInput(name="Alpha", type=NodeType.service)
+    )
+    b = await db.create_node(
+        NodeCreateInput(name="Beta", type=NodeType.database)
+    )
+    edge = await db.create_edge(
+        EdgeCreateInput(
+            source_id=a.id,
+            target_id=b.id,
+            relationship=EdgeRelationship.connects_to,
+        )
+    )
+    snap = await snapshot_blueprint(db, "full-state")
+
+    # Delete all nodes (edges cascade)
+    await db.delete_node(a.id)
+    await db.delete_node(b.id)
+
+    # Verify they're gone
+    assert await db.get_node(a.id) is None
+    assert await db.get_node(b.id) is None
+
+    # Restore
+    result = await restore_snapshot(db, snap["id"], confirm=True)
+    assert result["restored"] is True
+    assert result["snapshot_name"] == "full-state"
+    assert result["node_count"] == 2
+    assert result["edge_count"] == 1
+
+    # Verify original IDs are preserved
+    restored_a = await db.get_node(a.id)
+    assert restored_a is not None
+    assert restored_a.name == "Alpha"
+
+    restored_b = await db.get_node(b.id)
+    assert restored_b is not None
+    assert restored_b.name == "Beta"
+
+
+async def test_restore_snapshot_requires_confirm(db: Database):
+    """Call restore_snapshot with confirm=False → error returned and node still exists."""
+    a = await db.create_node(
+        NodeCreateInput(name="Gamma", type=NodeType.service)
+    )
+    snap = await snapshot_blueprint(db, "confirm-test")
+
+    result = await restore_snapshot(db, snap["id"], confirm=False)
+    assert "error" in result
+    assert "confirm=True" in result["error"]
+
+    # Node should still exist (nothing was deleted)
+    still_there = await db.get_node(a.id)
+    assert still_there is not None
+    assert still_there.name == "Gamma"
