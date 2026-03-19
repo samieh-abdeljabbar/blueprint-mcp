@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from fastmcp import Context, FastMCP
 from fastmcp.server.lifespan import lifespan
 from pydantic import ValidationError
@@ -12,7 +14,12 @@ from src.models import EdgeCreateInput, NodeCreateInput, NodeUpdateInput
 
 @lifespan
 async def app_lifespan(server):
-    db = await init_db()
+    project_dir = os.environ.get("BLUEPRINT_PROJECT_DIR")
+    if project_dir:
+        db_path = os.path.join(project_dir, ".blueprint.db")
+        db = await init_db(db_path)
+    else:
+        db = await init_db()
     try:
         yield {"db": db}
     finally:
@@ -214,12 +221,14 @@ from src.scanner import scan_project, scan_single_file
 
 @mcp.tool
 async def scan_codebase(
-    path: str = ".",
+    path: str | None = None,
     languages: list[str] | None = None,
     deep: bool = False,
     ctx: Context = None,
 ) -> dict:
     """Scan a project directory and auto-populate the blueprint from existing code."""
+    if path is None:
+        path = os.environ.get("BLUEPRINT_PROJECT_DIR", ".")
     db = _get_db(ctx)
     return await scan_project(path, db, languages=languages, deep=deep)
 
@@ -351,9 +360,12 @@ from src.xray import render_blueprint as _render_blueprint
 
 @mcp.tool
 async def render_blueprint(
-    output_path: str = ".blueprint.html", theme: str = "light", ctx: Context = None
+    output_path: str | None = None, theme: str = "light", ctx: Context = None
 ) -> dict:
     """Generate a self-contained HTML visualization of the blueprint with D3.js."""
+    if output_path is None:
+        project_dir = os.environ.get("BLUEPRINT_PROJECT_DIR", ".")
+        output_path = os.path.join(project_dir, ".blueprint.html")
     db = _get_db(ctx)
     return await _render_blueprint(db, output_path, theme)
 

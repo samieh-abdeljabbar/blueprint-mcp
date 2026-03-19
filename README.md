@@ -13,6 +13,7 @@ Scan existing codebases to auto-detect architecture, apply starter templates, fi
 ## Table of Contents
 
 - [Installation](#installation)
+- [Global Setup (Recommended)](#global-setup-recommended)
 - [Quick Start](#quick-start)
 - [All 38 MCP Tools](#all-38-mcp-tools)
 - [Templates](#templates)
@@ -54,11 +55,15 @@ This installs Blueprint MCP in editable mode along with all dependencies (FastMC
 
 ### Step 3: Connect to Claude Code
 
+> **Want Blueprint available in every project?** Skip to [Global Setup](#global-setup-recommended) below.
+
 **Per-project** (recommended for trying it out):
 
 ```bash
 claude mcp add blueprint -- python -m src.server
 ```
+
+This only makes Blueprint available in this one project directory. For multi-project use, see Global Setup below.
 
 **Global** (available in every project):
 
@@ -92,6 +97,92 @@ List the available blueprint templates
 ```
 
 If Claude responds with template names (saas, api_service, fullstack, etc.), you're connected.
+
+---
+
+## Global Setup (Recommended)
+
+The per-project setup above only makes Blueprint available in one project. To use Blueprint MCP across **all** your projects, set it up globally with a launcher script.
+
+### Step 1: Create the Launcher Script
+
+```bash
+# From the blueprint-mcp directory:
+echo '#!/bin/bash
+cd '"$(pwd)"' && .venv/bin/python -m src.server' > ~/blueprint-mcp.sh
+chmod +x ~/blueprint-mcp.sh
+```
+
+This creates a small script that starts the Blueprint server from the correct directory with the correct Python environment, no matter where you run Claude Code from.
+
+### Step 2: Add to Each Project
+
+Create a `.mcp.json` file in any project root:
+
+```json
+{
+  "mcpServers": {
+    "blueprint": {
+      "command": "bash",
+      "args": ["/path/to/your/home/blueprint-mcp.sh"],
+      "env": {
+        "BLUEPRINT_PROJECT_DIR": "/absolute/path/to/this/project"
+      }
+    }
+  }
+}
+```
+
+Replace `/path/to/your/home/` with your actual home directory path (e.g., `/Users/yourname/blueprint-mcp.sh`) and `/absolute/path/to/this/project` with the project's absolute path.
+
+Or use this one-liner from any project directory:
+
+```bash
+echo '{"mcpServers":{"blueprint":{"command":"bash","args":["'$HOME'/blueprint-mcp.sh"],"env":{"BLUEPRINT_PROJECT_DIR":"'$(pwd)'"}}}}' > .mcp.json
+```
+
+### Step 3: Verify
+
+Open Claude Code in any project with the `.mcp.json` file:
+
+```bash
+cd ~/your-project
+claude
+```
+
+Run `/mcp` — Blueprint should show connected. Then:
+
+```
+List the available blueprint templates
+```
+
+If Claude responds with template names, you're set.
+
+### Step 4: First-Time Setup Per Project
+
+Each project gets its own `.blueprint.db` database. The first time you use Blueprint in a new project:
+
+```
+Scan this codebase and populate the blueprint
+```
+
+This creates the database and detects your project's architecture automatically.
+
+> **Tip:** Add `.blueprint.db` to your global gitignore if you don't want blueprint databases committed:
+> ```bash
+> echo ".blueprint.db" >> ~/.gitignore_global
+> git config --global core.excludesfile ~/.gitignore_global
+> ```
+
+### Troubleshooting
+
+| Problem | Cause | Fix |
+|---------|-------|-----|
+| `/mcp` shows failed | Launcher script not found | Verify `~/blueprint-mcp.sh` exists and is executable: `ls -la ~/blueprint-mcp.sh` |
+| `/mcp` shows failed | Wrong Python path | Run `bash ~/blueprint-mcp.sh` manually — if it shows the FastMCP banner, the script is fine |
+| `/mcp` shows `Command: python` | Old config overriding `.mcp.json` | Check `~/.claude.json` for stale blueprint entries and remove them |
+| Server starts but tools don't work | Missing dependencies | Run `cd /path/to/blueprint-mcp && pip install -e ".[dev]"` in the venv |
+| "Failed to reconnect" on restart | Cached config | Fully quit terminal, reopen, and run `claude` fresh |
 
 ---
 
