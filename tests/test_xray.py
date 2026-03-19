@@ -86,3 +86,37 @@ async def test_data_json_includes_descriptions(db: Database):
     assert data["node_type_descriptions"] == NODE_TYPE_DESCRIPTIONS
     assert data["node_status_descriptions"] == NODE_STATUS_DESCRIPTIONS
     assert data["edge_relationship_descriptions"] == EDGE_RELATIONSHIP_DESCRIPTIONS
+
+
+# --- Stage 2: Legend + Help Panel tests ---
+
+
+async def test_help_panel_has_legend_tab(db: Database, tmp_path):
+    """Help panel HTML contains the legend tab button and Node Colors section."""
+    output = str(tmp_path / "test.html")
+    await render_blueprint(db, output_path=output)
+    html = open(output).read()
+    assert 'data-help-tab="legend"' in html
+    assert "Node Colors" in html
+
+
+async def test_help_panel_has_shortcuts_tab(db: Database, tmp_path):
+    """Help panel HTML contains the shortcuts tab and existing shortcuts text."""
+    output = str(tmp_path / "test.html")
+    await render_blueprint(db, output_path=output)
+    html = open(output).read()
+    assert 'data-help-tab="shortcuts"' in html
+    assert "collapse/expand" in html
+
+
+async def test_legend_contains_all_categories(db: Database, tmp_path):
+    """Legend contains all 9 category names from TYPE_CATEGORIES."""
+    output = str(tmp_path / "test.html")
+    await render_blueprint(db, output_path=output)
+    html = open(output).read()
+    categories = [
+        "Infrastructure", "Services", "API", "Data", "Code",
+        "Files", "Schema", "External", "Testing",
+    ]
+    for cat in categories:
+        assert cat in html, f"Legend missing category: {cat}"

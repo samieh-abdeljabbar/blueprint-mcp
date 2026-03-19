@@ -697,6 +697,62 @@ html, body {
 
 /* Edge hit zone */
 .edge-hit-zone { pointer-events:stroke; }
+
+/* ================================================================
+   HELP PANEL (Legend + Shortcuts)
+   ================================================================ */
+#help-panel {
+  width: 320px; max-height: 420px;
+  display: none; flex-direction: column;
+  position: absolute; bottom: 48px; left: 12px;
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 8px; box-shadow: 0 4px 16px var(--shadow-lg);
+  z-index: 100; overflow: hidden;
+}
+.help-tabs {
+  display: flex; border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary); flex-shrink: 0;
+}
+.help-tab-btn {
+  flex: 1; padding: 8px 0; font-size: 12px; font-weight: 600;
+  border: none; background: transparent; color: var(--text-secondary);
+  cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.15s;
+}
+.help-tab-btn:hover { color: var(--text); }
+.help-tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); background: var(--tab-active-bg); }
+.help-tab-content { flex: 1; overflow-y: auto; }
+.help-tab-pane { display: none; padding: 10px 12px; }
+.help-tab-pane.active { display: block; }
+.legend-section {
+  font-size: 9px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.5px; color: var(--text-muted); margin: 10px 0 6px; padding-top: 6px;
+  border-top: 1px solid var(--border-light);
+}
+.legend-section:first-child { border-top: none; margin-top: 0; padding-top: 0; }
+.legend-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 3px 0; font-size: 12px; color: var(--text-secondary);
+}
+.legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.legend-name { font-weight: 600; color: var(--text); }
+.legend-types { font-size: 10px; color: var(--text-muted); }
+.legend-status-dot {
+  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+}
+.legend-status-dot.dashed {
+  background: transparent !important;
+  border: 2px dashed currentColor;
+  width: 8px; height: 8px;
+}
+.legend-status-dot.pulsing { animation: pulse-bar 2s ease-in-out infinite; }
+.legend-status-dot.grayscale { filter: grayscale(0.8); opacity: 0.5; }
+.legend-edge-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 3px 0; font-size: 12px; color: var(--text-secondary);
+}
+.legend-edge-line {
+  width: 30px; height: 2px; flex-shrink: 0;
+}
 </style>
 </head>
 <body>
@@ -730,12 +786,21 @@ html, body {
       <button class="zoom-btn" id="zoom-fit" title="Zoom to fit">&#8859;</button>
       <button class="zoom-btn" id="help-btn" title="Shortcuts">?</button>
     </div>
-    <div id="help-panel" class="context-menu" style="display:none;bottom:48px;left:12px;position:absolute">
-      <div style="padding:8px 12px;font-size:12px;line-height:1.8;color:var(--text-secondary)">
-        <b>Dbl-click group</b> — collapse/expand<br>
-        <b>Right-click node</b> — focus neighborhood<br>
-        <b>Escape</b> — reset view<br>
-        <b>Click pill</b> — expand hidden group
+    <div id="help-panel">
+      <div class="help-tabs">
+        <button class="help-tab-btn active" data-help-tab="legend">Legend</button>
+        <button class="help-tab-btn" data-help-tab="shortcuts">Shortcuts</button>
+      </div>
+      <div class="help-tab-content">
+        <div id="help-legend" class="help-tab-pane active"></div>
+        <div id="help-shortcuts" class="help-tab-pane">
+          <div style="font-size:12px;line-height:1.8;color:var(--text-secondary)">
+            <b>Dbl-click group</b> — collapse/expand<br>
+            <b>Right-click node</b> — focus neighborhood<br>
+            <b>Escape</b> — reset view<br>
+            <b>Click pill</b> — expand hidden group
+          </div>
+        </div>
       </div>
     </div>
     <div id="minimap"><svg id="minimap-svg"></svg></div>
@@ -912,6 +977,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initEscapeKey();
   initContextMenu();
   initLayoutToggle();
+  initHelpPanel();
   renderHealth();
   renderQuestions();
   renderEmptyDetail();
@@ -1013,6 +1079,7 @@ function initEscapeKey() {
       deselectAll();
       if (focusedMode) showAllNodes();
       hideContextMenu();
+      document.getElementById('help-panel').style.display = 'none';
     }
   });
 }
@@ -1099,6 +1166,77 @@ function initLayoutToggle() {
       rebuildSimulation();
     });
   });
+}
+
+/* ================================================================
+   HELP PANEL (Legend + Shortcuts)
+   ================================================================ */
+function initHelpPanel() {
+  /* Tab switching */
+  document.querySelectorAll('.help-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.help-tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.help-tab-pane').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('help-' + btn.dataset.helpTab).classList.add('active');
+    });
+  });
+
+  /* Click outside to close */
+  document.addEventListener('click', (e) => {
+    const panel = document.getElementById('help-panel');
+    if (panel.style.display === 'flex' && !panel.contains(e.target) && e.target.id !== 'help-btn') {
+      panel.style.display = 'none';
+    }
+  });
+
+  /* Build legend content */
+  let h = '';
+
+  /* Node Colors section */
+  h += '<div class="legend-section">Node Colors</div>';
+  Object.entries(TYPE_CATEGORIES).forEach(([cat, info]) => {
+    h += '<div class="legend-row">';
+    h += '<span class="legend-dot" style="background:' + info.color + '"></span>';
+    h += '<span class="legend-name">' + cat + '</span>';
+    h += '<span class="legend-types">' + info.types.join(', ') + '</span>';
+    h += '</div>';
+  });
+
+  /* Status section */
+  h += '<div class="legend-section">Status</div>';
+  const statusEntries = [
+    { key: 'built',       label: 'Built',       cls: '' },
+    { key: 'planned',     label: 'Planned',     cls: ' dashed' },
+    { key: 'in_progress', label: 'In Progress', cls: ' pulsing' },
+    { key: 'broken',      label: 'Broken',      cls: '' },
+    { key: 'deprecated',  label: 'Deprecated',  cls: ' grayscale' }
+  ];
+  statusEntries.forEach(s => {
+    h += '<div class="legend-row">';
+    h += '<span class="legend-status-dot' + s.cls + '" style="background:' + (STATUS_COLORS[s.key] || '#a0aec0') + ';color:' + (STATUS_COLORS[s.key] || '#a0aec0') + '"></span>';
+    h += '<span class="legend-name">' + s.label + '</span>';
+    if (NODE_STATUS_HELP[s.key]) h += '<span class="legend-types">' + NODE_STATUS_HELP[s.key] + '</span>';
+    h += '</div>';
+  });
+
+  /* Edge Patterns section */
+  h += '<div class="legend-section">Edge Patterns</div>';
+  const edgePatterns = [
+    { label: 'Solid',       dash: '', desc: 'calls, delegates, uses' },
+    { label: 'Long dash',   dash: '12 4', desc: 'reads_from, writes_to, updates' },
+    { label: 'Short dash',  dash: '3 3', desc: 'contains, creates, produces' },
+    { label: 'Medium dash', dash: '8 4', desc: 'depends_on, inherits, implements' }
+  ];
+  edgePatterns.forEach(p => {
+    h += '<div class="legend-edge-row">';
+    h += '<svg width="30" height="4" style="flex-shrink:0"><line x1="0" y1="2" x2="30" y2="2" stroke="var(--text-secondary)" stroke-width="2"' + (p.dash ? ' stroke-dasharray="' + p.dash + '"' : '') + '/></svg>';
+    h += '<span class="legend-name">' + p.label + '</span>';
+    h += '<span class="legend-types">' + p.desc + '</span>';
+    h += '</div>';
+  });
+
+  document.getElementById('help-legend').innerHTML = h;
 }
 
 /* ================================================================
@@ -1644,9 +1782,10 @@ function buildGraph() {
   document.getElementById('zoom-in').addEventListener('click',  () => svgEl.transition().duration(300).call(zoom.scaleBy, 1.3));
   document.getElementById('zoom-out').addEventListener('click', () => svgEl.transition().duration(300).call(zoom.scaleBy, 0.7));
   document.getElementById('zoom-fit').addEventListener('click', () => zoomToFit());
-  document.getElementById('help-btn').addEventListener('click', () => {
+  document.getElementById('help-btn').addEventListener('click', (evt) => {
+    evt.stopPropagation();
     const p = document.getElementById('help-panel');
-    p.style.display = p.style.display === 'none' ? 'block' : 'none';
+    p.style.display = p.style.display === 'flex' ? 'none' : 'flex';
   });
 }
 
