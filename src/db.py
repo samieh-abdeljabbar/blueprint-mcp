@@ -382,6 +382,15 @@ class Database:
 
         return await self.get_node(inp.id, depth=0)
 
+    async def update_node_parent(self, node_id: str, parent_id: str) -> None:
+        """Update a node's parent_id."""
+        now = _now()
+        await self.db.execute(
+            "UPDATE nodes SET parent_id = ?, updated_at = ? WHERE id = ?",
+            (parent_id, now, node_id),
+        )
+        await self.db.commit()
+
     async def delete_node(self, node_id: str) -> bool:
         # Fetch for changelog before deleting
         cursor = await self.db.execute(
@@ -427,6 +436,16 @@ class Database:
         existing = await self.find_node(
             inp.name, inp.type.value, inp.parent_id
         )
+        # Fallback: if not found by parent_id, try matching by source_file
+        # (handles nodes whose parent was changed by directory grouping)
+        if not existing and inp.source_file:
+            cursor = await self.db.execute(
+                "SELECT * FROM nodes WHERE name = ? AND type = ? AND source_file = ?",
+                (inp.name, inp.type.value, inp.source_file),
+            )
+            row = await cursor.fetchone()
+            if row:
+                existing = _row_to_node(row)
         if existing:
             # Update metadata / source info if provided
             updates = NodeUpdateInput(id=existing.id)

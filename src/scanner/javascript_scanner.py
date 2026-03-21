@@ -97,6 +97,9 @@ class JavaScriptScanner(BaseScanner):
                     await self._scan_prisma_file(full, path)
                     self._files_scanned += 1
 
+        # Create directory hierarchy (before edges, after all nodes)
+        await self._create_directory_parents(path)
+
         # Create deferred edges
         await self._create_deferred_edges()
 
@@ -580,6 +583,61 @@ class JavaScriptScanner(BaseScanner):
                 source_file=rel_path,
                 source_line=line,
             ))
+
+    async def _create_directory_parents(self, project_root: str):
+        """Create parent module nodes for directories that contain multiple components."""
+        dir_counts: dict[str, int] = {}
+        dir_files: dict[str, list[tuple[str, str]]] = {}
+
+        for rel_path, node_id in self._module_node_ids.items():
+            rel_dir = os.path.dirname(rel_path)
+            if not rel_dir or rel_dir == ".":
+                continue
+            if rel_dir not in dir_counts:
+                dir_counts[rel_dir] = 0
+                dir_files[rel_dir] = []
+            dir_counts[rel_dir] += 1
+            dir_files[rel_dir].append((rel_path, node_id))
+
+        # Process deepest directories first so children get correct parents
+        sorted_dirs = sorted(
+            dir_counts.keys(), key=lambda d: d.count(os.sep), reverse=True
+        )
+        dir_node_ids: dict[str, str] = {}
+
+        for rel_dir in sorted_dirs:
+            if dir_counts[rel_dir] < 2:
+                continue
+
+            dir_name = os.path.basename(rel_dir)
+
+            # Skip 'src' at top level — too broad to be a useful parent
+            if dir_name == "src" and rel_dir == "src":
+                continue
+
+            # Find this directory's parent directory node (if it exists)
+            parent_dir = os.path.dirname(rel_dir)
+            parent_id = dir_node_ids.get(parent_dir, self.root_id)
+
+            node_id, _ = await self._track_node(NodeCreateInput(
+                name=dir_name,
+                type=NodeType.module,
+                status=NodeStatus.built,
+                parent_id=parent_id,
+                description=f"Directory: {rel_dir}",
+                metadata={"directory": True, "path": rel_dir},
+            ))
+            dir_node_ids[rel_dir] = node_id
+
+        # Re-parent existing nodes to their directory parent
+        for rel_dir, files in dir_files.items():
+            parent_node_id = dir_node_ids.get(rel_dir)
+            if not parent_node_id:
+                continue
+            for _rel_path, node_id in files:
+                # Don't self-parent (directory node may reuse a file node)
+                if node_id != parent_node_id:
+                    await self.db.update_node_parent(node_id, parent_node_id)
 
     async def _create_deferred_edges(self):
         """Create all deferred edges after scanning is complete."""

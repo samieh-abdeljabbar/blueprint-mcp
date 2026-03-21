@@ -106,7 +106,7 @@ async def test_help_panel_has_shortcuts_tab(db: Database, tmp_path):
     await render_blueprint(db, output_path=output)
     html = open(output).read()
     assert 'data-help-tab="shortcuts"' in html
-    assert "collapse/expand" in html
+    assert "drill into group" in html
 
 
 async def test_legend_contains_all_categories(db: Database, tmp_path):
@@ -148,3 +148,51 @@ async def test_onboarding_uses_localstorage(db: Database, tmp_path):
     await render_blueprint(db, output_path=output)
     html = open(output).read()
     assert "blueprint-xray-onboarded" in html
+
+
+# --- Stage 4: Drill-Down Explorer tests ---
+
+
+async def test_breadcrumb_bar_present(db: Database, tmp_path):
+    """HTML contains breadcrumb bar element."""
+    output = str(tmp_path / "test.html")
+    await render_blueprint(db, output_path=output)
+    html = open(output).read()
+    assert 'id="breadcrumb-bar"' in html
+
+
+async def test_drill_down_functions_present(db: Database, tmp_path):
+    """HTML contains drill-down navigation functions."""
+    output = str(tmp_path / "test.html")
+    await render_blueprint(db, output_path=output)
+    html = open(output).read()
+    assert "navigateToLevel" in html
+    assert "renderOverview" in html
+    assert "renderGroup" in html
+    assert "renderFocus" in html
+
+
+async def test_overview_is_default_level(db: Database, tmp_path):
+    """HTML initializes with currentLevel = 1 (overview)."""
+    output = str(tmp_path / "test.html")
+    await render_blueprint(db, output_path=output)
+    html = open(output).read()
+    assert "currentLevel" in html
+    assert "navigateToLevel(1)" in html
+
+
+async def test_ghost_node_styling_present(db: Database, tmp_path):
+    """HTML contains ghost node CSS styling."""
+    output = str(tmp_path / "test.html")
+    await render_blueprint(db, output_path=output)
+    html = open(output).read()
+    assert ".ghost-node" in html
+    assert ".ghost-label" in html
+
+
+async def test_drill_in_button_in_detail(db: Database, tmp_path):
+    """HTML contains drill-in button template."""
+    output = str(tmp_path / "test.html")
+    await render_blueprint(db, output_path=output)
+    html = open(output).read()
+    assert "drill-in-btn" in html
