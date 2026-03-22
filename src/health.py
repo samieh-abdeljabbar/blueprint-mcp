@@ -13,9 +13,9 @@ def _score_node(node: Node, edges: list[Edge], all_nodes: list[Node]) -> dict:
     """Score a single node on a 0-100 scale, returning per-category breakdown."""
     breakdown: dict[str, int] = {}
 
-    # Has description: +15
+    # Has description: +5 (low weight — auto-scanned nodes rarely have descriptions)
     if node.description:
-        breakdown["description"] = 15
+        breakdown["description"] = 5
     else:
         breakdown["description"] = 0
 
@@ -31,12 +31,12 @@ def _score_node(node: Node, edges: list[Edge], all_nodes: list[Node]) -> dict:
     else:
         breakdown["source_file_exists"] = 0
 
-    # Has at least one edge: +20
+    # Has at least one edge: +25 (most important architectural signal)
     node_edge_count = sum(
         1 for e in edges if e.source_id == node.id or e.target_id == node.id
     )
     if node_edge_count > 0:
-        breakdown["has_edges"] = 20
+        breakdown["has_edges"] = 25
     else:
         breakdown["has_edges"] = 0
 
@@ -140,8 +140,14 @@ async def health_report(db: Database, node_id: str | None = None) -> dict:
         node_ids_with_edges.add(e.source_id)
         node_ids_with_edges.add(e.target_id)
 
-    # Penalties
-    orphan_count = sum(1 for n in all_nodes if n.id not in node_ids_with_edges)
+    # Penalties — skip directory/container nodes from orphan count
+    parent_ids = {n.parent_id for n in all_nodes if n.parent_id}
+    orphan_count = sum(
+        1 for n in all_nodes
+        if n.id not in node_ids_with_edges
+        and not (n.metadata and n.metadata.get("directory"))
+        and n.id not in parent_ids
+    )
     broken_count = sum(1 for n in all_nodes if n.status.value == "broken")
 
     now = datetime.now(timezone.utc)
@@ -157,16 +163,20 @@ async def health_report(db: Database, node_id: str | None = None) -> dict:
             except (ValueError, TypeError):
                 pass
 
-    penalty = (orphan_count * 2) + (broken_count * 3) + (stale_planned_count * 1)
+    penalty = min(orphan_count * 2, 15) + (broken_count * 3) + (stale_planned_count * 1)
 
-    # Analyzer bonus
+    # Analyzer bonus — graduated by severity
     analyzer_bonus = 0
     try:
         from src.analyzer import analyze as _analyze
 
         issues = await _analyze(db)
-        if len(issues) == 0:
+        critical_issues = [i for i in issues if i.severity.value == "critical"]
+        warning_issues = [i for i in issues if i.severity.value == "warning"]
+        if len(critical_issues) == 0 and len(warning_issues) == 0:
             analyzer_bonus = 10
+        elif len(critical_issues) == 0:
+            analyzer_bonus = 5
     except Exception:
         pass
 

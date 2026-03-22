@@ -58,10 +58,10 @@ async def test_perfect_node_scores_high(db: Database):
     assert result["node_id"] == parent.id
     assert result["score"] >= 85
     assert result["grade"] in ("A", "B")
-    assert result["breakdown"]["description"] == 15
+    assert result["breakdown"]["description"] == 5
     assert result["breakdown"]["source_file"] == 15
     assert result["breakdown"]["source_file_exists"] == 10
-    assert result["breakdown"]["has_edges"] == 20
+    assert result["breakdown"]["has_edges"] == 25
     assert result["breakdown"]["status_built"] == 15
     assert result["breakdown"]["status_not_broken"] == 10
     assert result["breakdown"]["has_children"] == 10
@@ -171,8 +171,8 @@ async def test_single_node_health_returns_breakdown(db: Database):
         "has_metadata",
     }
     assert set(result["breakdown"].keys()) == expected_keys
-    # description is present so it should earn 15
-    assert result["breakdown"]["description"] == 15
+    # description is present so it should earn 5
+    assert result["breakdown"]["description"] == 5
     # status is in_progress, not built
     assert result["breakdown"]["status_built"] == 0
     # in_progress is not broken/deprecated

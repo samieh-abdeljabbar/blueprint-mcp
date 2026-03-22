@@ -157,12 +157,30 @@ def _check_circular_dependencies(
                 if cycle_key not in found_cycles:
                     found_cycles.add(cycle_key)
                     names = [node_map[nid].name for nid in cycle if nid in node_map]
+
+                    # Same-directory cycles (e.g., HalfEdge ↔ Vertex) are often
+                    # intentional data structure patterns — downgrade to info
+                    cycle_dirs = set()
+                    for nid in cycle:
+                        m = node_map.get(nid)
+                        if m and m.source_file:
+                            cycle_dirs.add(os.path.dirname(m.source_file))
+                    if len(cycle_dirs) == 1 and cycle_dirs != {"", "."}:
+                        severity = IssueSeverity.info
+                        suggestion = (
+                            "These types reference each other within the same module "
+                            "— may be intentional for data structures"
+                        )
+                    else:
+                        severity = IssueSeverity.critical
+                        suggestion = "Break the cycle by removing or reversing one dependency"
+
                     issues.append(Issue(
-                        severity=IssueSeverity.critical,
+                        severity=severity,
                         type="circular_dependency",
                         message=f"Circular dependency detected: {' → '.join(names)}",
                         node_ids=list(cycle),
-                        suggestion="Break the cycle by removing or reversing one dependency",
+                        suggestion=suggestion,
                     ))
     return issues
 
@@ -250,8 +268,8 @@ def _check_single_point_of_failure(
             parent[n.id] = None
             dfs(n.id)
 
-    # Entry points are always articulation points but flagging them is noise
-    entry_point_types = {"system"}
+    # Entry points and foundational types are always articulation points but flagging them is noise
+    entry_point_types = {"system", "struct", "protocol", "enum_def"}
     entry_point_names = {"main", "app", "index", "root"}
     for nid in ap:
         n = node_map.get(nid)
@@ -281,9 +299,20 @@ def _check_stale_nodes(nodes: list[Node], db_path: str) -> list[Issue]:
     issues = []
     # Resolve relative to the directory containing the DB
     base_dir = os.path.dirname(os.path.abspath(db_path))
+    # Also check common subdirectories (e.g., src-tauri/ for Tauri projects)
+    sub_dirs = [base_dir]
+    for entry in os.listdir(base_dir) if os.path.isdir(base_dir) else []:
+        sub = os.path.join(base_dir, entry)
+        if os.path.isdir(sub) and not entry.startswith("."):
+            sub_dirs.append(sub)
 
     for n in nodes:
         if n.source_file:
+            found = any(
+                os.path.exists(os.path.join(d, n.source_file)) for d in sub_dirs
+            )
+            if found:
+                continue
             full_path = os.path.join(base_dir, n.source_file)
             if not os.path.exists(full_path):
                 issues.append(Issue(
@@ -328,15 +357,28 @@ def _check_unused_modules(nodes: list[Node], edges: list[Edge]) -> list[Issue]:
 
 
 def _check_missing_descriptions(nodes: list[Node]) -> list[Issue]:
-    """Nodes with no description."""
+    """Nodes with no description — filtered to only flag types where descriptions add value."""
     issues = []
+    # Types where descriptions are expected vs not
+    skip_types = {"file", "script", "config", "column", "migration", "external", "test",
+                   "view", "struct", "enum_def", "protocol"}
+    parent_ids = {n.parent_id for n in nodes if n.parent_id}
     for n in nodes:
-        if not n.description:
-            issues.append(Issue(
-                severity=IssueSeverity.info,
-                type="missing_description",
-                message=f"'{n.name}' has no description",
-                node_ids=[n.id],
-                suggestion=f"Add a description to '{n.name}' for better documentation",
-            ))
+        if n.description:
+            continue
+        if n.type.value in skip_types:
+            continue
+        # Skip directory group nodes — organizational, not code
+        if n.metadata and n.metadata.get("directory"):
+            continue
+        # Skip container/parent nodes
+        if n.id in parent_ids:
+            continue
+        issues.append(Issue(
+            severity=IssueSeverity.info,
+            type="missing_description",
+            message=f"'{n.name}' has no description",
+            node_ids=[n.id],
+            suggestion=f"Add a description to '{n.name}' for better documentation",
+        ))
     return issues
