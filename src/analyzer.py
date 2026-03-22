@@ -135,8 +135,11 @@ def _check_circular_dependencies(
                 continue
             if color[v] == GRAY:
                 # Found cycle — extract it
-                cycle_start = path.index(v)
-                return path[cycle_start:]
+                if v in path:
+                    cycle_start = path.index(v)
+                    return path[cycle_start:]
+                # v is GRAY from a previous DFS tree — skip
+                continue
             if color[v] == WHITE:
                 result = dfs(v, path)
                 if result:
@@ -292,8 +295,15 @@ def _check_unused_modules(nodes: list[Node], edges: list[Edge]) -> list[Issue]:
             connected_modules.add(e.target_id)
 
     node_map = {n.id: n for n in nodes}
+    parent_ids = {n.parent_id for n in nodes if n.parent_id}
     for mid in module_ids - connected_modules:
         m = node_map[mid]
+        # Skip directory group nodes — organizational, not code
+        if m.metadata and m.metadata.get("directory"):
+            continue
+        # Skip nodes that have children (container/parent nodes)
+        if mid in parent_ids:
+            continue
         issues.append(Issue(
             severity=IssueSeverity.info,
             type="unused_module",
