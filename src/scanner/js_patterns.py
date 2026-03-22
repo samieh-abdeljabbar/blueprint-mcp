@@ -110,6 +110,11 @@ AXIOS_API_CALL = re.compile(
     r"""axios\.(?:get|post|put|delete|patch)\(\s*['"](/api/[^'"]+)['"]"""
 )
 
+# invoke("command_name") — Tauri IPC bridge
+TAURI_INVOKE = re.compile(
+    r"""invoke\(\s*['"](\w+)['"]"""
+)
+
 # --- Class patterns ---
 
 # class X extends Y {

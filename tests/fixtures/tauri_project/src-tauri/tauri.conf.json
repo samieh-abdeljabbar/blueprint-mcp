@@ -1,0 +1,10 @@
+{
+  "app": {
+    "windows": [
+      { "label": "main", "title": "Notes App", "width": 800, "height": 600 }
+    ]
+  },
+  "plugins": {
+    "sql": { "preload": { "db": "sqlite:notes.db" } }
+  }
+}

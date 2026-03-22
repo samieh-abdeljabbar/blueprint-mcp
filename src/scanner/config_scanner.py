@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import time
@@ -104,6 +105,9 @@ class ConfigScanner(BaseScanner):
         # Check for .env files at project root before walking
         await self._scan_env_files(path)
 
+        # Check for tauri.conf.json
+        await self._scan_tauri_conf(path)
+
         # Walk for config files
         for dirpath, dirnames, filenames in os.walk(path):
             dirnames[:] = [
@@ -181,6 +185,44 @@ class ConfigScanner(BaseScanner):
                     metadata={"variables": var_names, "config_type": "env"},
                     source_file=entry,
                 ))
+
+    async def _scan_tauri_conf(self, project_root: str):
+        """Scan tauri.conf.json for window configs and plugins."""
+        for candidate in ("tauri.conf.json", "src-tauri/tauri.conf.json"):
+            conf_path = os.path.join(project_root, candidate)
+            if not os.path.isfile(conf_path):
+                continue
+            try:
+                with open(conf_path) as f:
+                    data = json.load(f)
+            except Exception:
+                continue
+
+            self._files_scanned += 1
+
+            # App windows
+            for window in data.get("app", {}).get("windows", []):
+                label = window.get("label", "main")
+                await self._track_node(NodeCreateInput(
+                    name=f"window:{label}",
+                    type=NodeType.view,
+                    status=NodeStatus.built,
+                    parent_id=self.root_id,
+                    metadata={"tauri_window": True, "title": window.get("title", "")},
+                    source_file=candidate,
+                ))
+
+            # Plugins
+            for plugin_name in data.get("plugins", {}):
+                await self._track_node(NodeCreateInput(
+                    name=f"tauri-plugin-{plugin_name}",
+                    type=NodeType.external,
+                    status=NodeStatus.built,
+                    parent_id=self.root_id,
+                    metadata={"tauri_plugin": True},
+                    source_file=candidate,
+                ))
+            break  # Only parse the first found
 
     async def _scan_yaml_for_k8s(self, filepath: str, project_root: str):
         """Check if YAML file is a Kubernetes manifest and scan it."""

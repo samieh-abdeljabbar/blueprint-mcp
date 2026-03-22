@@ -19,11 +19,11 @@ from src.scanner.sql_scanner import SQLScanner
 # Map language names to scanner classes
 SCANNER_MAP = {
     "python": PythonScanner,
+    "rust": RustScanner,       # Before JS so Tauri commands exist for invoke() linking
+    "swift": SwiftScanner,
+    "go": GoScanner,
     "javascript": JavaScriptScanner,
     "docker": DockerScanner,
-    "swift": SwiftScanner,
-    "rust": RustScanner,
-    "go": GoScanner,
     "config": ConfigScanner,
     "sql": SQLScanner,
 }

@@ -35,6 +35,7 @@ GO_PROJECT = os.path.join(FIXTURES, "go_project")
 CONFIG_PROJECT = os.path.join(FIXTURES, "config_project")
 DJANGO_PROJECT = os.path.join(FIXTURES, "django_project")
 SQL_PROJECT = os.path.join(FIXTURES, "sql_project")
+TAURI_PROJECT = os.path.join(FIXTURES, "tauri_project")
 
 
 @pytest.fixture
@@ -1487,6 +1488,96 @@ async def test_rust_scanner_idempotent(db: Database):
     count2 = bp2["summary"]["total_nodes"]
 
     assert count1 == count2
+
+
+# =============================================================================
+# Tauri / IPC Bridge Tests
+# =============================================================================
+
+
+async def test_rust_scanner_detects_tauri_commands(db: Database):
+    """#[tauri::command] functions create route nodes."""
+    info = await scan_project_files(TAURI_PROJECT, db)
+    scanner = RustScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(os.path.join(TAURI_PROJECT, "src-tauri"))
+
+    bp = await db.get_blueprint(type_filter="route")
+    route_names = {n["name"] for n in bp["nodes"]}
+    assert "get_notes" in route_names
+    assert "save_note" in route_names
+    assert "delete_note" in route_names
+
+
+async def test_rust_scanner_tauri_command_metadata(db: Database):
+    """Tauri command nodes have tauri_command and ipc metadata."""
+    info = await scan_project_files(TAURI_PROJECT, db)
+    scanner = RustScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(os.path.join(TAURI_PROJECT, "src-tauri"))
+
+    bp = await db.get_blueprint(type_filter="route")
+    for node in bp["nodes"]:
+        if node["name"] == "get_notes":
+            meta = node.get("metadata") or {}
+            assert meta.get("tauri_command") is True
+            assert meta.get("ipc") is True
+            return
+    raise AssertionError("get_notes not found")
+
+
+async def test_js_scanner_detects_invoke_calls(db: Database):
+    """invoke('get_notes') creates calls edge when Rust commands exist."""
+    info = await scan_project_files(TAURI_PROJECT, db)
+    # Run Rust scanner first to create command nodes
+    rust_scanner = RustScanner(db, info.root_id, info.gitignore_spec)
+    await rust_scanner.scan(os.path.join(TAURI_PROJECT, "src-tauri"))
+    # Then JS scanner to create invoke edges
+    js_scanner = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
+    await js_scanner.scan(TAURI_PROJECT)
+
+    bp = await db.get_blueprint()
+    nodes = {n["id"]: n["name"] for n in bp["nodes"]}
+    calls_edges = [e for e in bp["edges"] if e["relationship"] == "calls"]
+    call_pairs = [(nodes.get(e["source_id"]), nodes.get(e["target_id"])) for e in calls_edges]
+    assert ("App", "get_notes") in call_pairs
+
+
+async def test_js_scanner_invoke_multiple_commands(db: Database):
+    """Multiple invoke() calls create edges to different Tauri commands."""
+    info = await scan_project_files(TAURI_PROJECT, db)
+    rust_scanner = RustScanner(db, info.root_id, info.gitignore_spec)
+    await rust_scanner.scan(os.path.join(TAURI_PROJECT, "src-tauri"))
+    js_scanner = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
+    await js_scanner.scan(TAURI_PROJECT)
+
+    bp = await db.get_blueprint()
+    nodes = {n["id"]: n["name"] for n in bp["nodes"]}
+    calls_edges = [e for e in bp["edges"] if e["relationship"] == "calls"]
+    call_targets = {nodes.get(e["target_id"]) for e in calls_edges}
+    assert "get_notes" in call_targets
+    assert "save_note" in call_targets
+    assert "delete_note" in call_targets
+
+
+async def test_config_scanner_detects_tauri_windows(db: Database):
+    """tauri.conf.json window creates view node."""
+    info = await scan_project_files(TAURI_PROJECT, db)
+    scanner = ConfigScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(TAURI_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="view")
+    view_names = {n["name"] for n in bp["nodes"]}
+    assert "window:main" in view_names
+
+
+async def test_config_scanner_detects_tauri_plugins(db: Database):
+    """tauri.conf.json plugins create external nodes."""
+    info = await scan_project_files(TAURI_PROJECT, db)
+    scanner = ConfigScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(TAURI_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="external")
+    ext_names = {n["name"] for n in bp["nodes"]}
+    assert "tauri-plugin-sql" in ext_names
 
 
 # =============================================================================

@@ -282,6 +282,65 @@ async def test_single_point_of_failure(db: Database):
     assert "Gateway" in spof_names
 
 
+async def test_spof_skips_entry_points(db: Database):
+    """System nodes and entry points should not be flagged as SPOF."""
+    # A(system) -- B(module) -- C(module)  => A is AP but should be skipped
+    a = await db.create_node(
+        NodeCreateInput(name="MyProject", type=NodeType.system)
+    )
+    b = await db.create_node(
+        NodeCreateInput(name="Core", type=NodeType.module)
+    )
+    c = await db.create_node(
+        NodeCreateInput(name="Utils", type=NodeType.module)
+    )
+    await db.create_edge(EdgeCreateInput(
+        source_id=a.id, target_id=b.id, relationship=EdgeRelationship.contains
+    ))
+    await db.create_edge(EdgeCreateInput(
+        source_id=b.id, target_id=c.id, relationship=EdgeRelationship.depends_on
+    ))
+    issues = await analyze(db)
+    spof = [i for i in issues if i.type == "single_point_of_failure"]
+    spof_names = set()
+    for s in spof:
+        for nid in s.node_ids:
+            node = await db.get_node(nid)
+            if node:
+                spof_names.add(node.name)
+    # System node "MyProject" should NOT be flagged
+    assert "MyProject" not in spof_names
+
+
+async def test_spof_skips_main_app_names(db: Database):
+    """Nodes named 'main' or 'App' should not be flagged as SPOF."""
+    a = await db.create_node(
+        NodeCreateInput(name="App", type=NodeType.module)
+    )
+    b = await db.create_node(
+        NodeCreateInput(name="Router", type=NodeType.module)
+    )
+    c = await db.create_node(
+        NodeCreateInput(name="Dashboard", type=NodeType.module)
+    )
+    await db.create_edge(EdgeCreateInput(
+        source_id=a.id, target_id=b.id, relationship=EdgeRelationship.calls
+    ))
+    await db.create_edge(EdgeCreateInput(
+        source_id=b.id, target_id=c.id, relationship=EdgeRelationship.calls
+    ))
+    issues = await analyze(db)
+    spof = [i for i in issues if i.type == "single_point_of_failure"]
+    spof_names = set()
+    for s in spof:
+        for nid in s.node_ids:
+            node = await db.get_node(nid)
+            if node:
+                spof_names.add(node.name)
+    # "App" is a common entry point name — should be skipped
+    assert "App" not in spof_names
+
+
 async def test_stale_node(db: Database):
     """Node with nonexistent source_file → stale_node."""
     await db.create_node(

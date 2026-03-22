@@ -39,6 +39,10 @@ ROUTE_MACRO = re.compile(
     r'#\[(get|post|put|delete|patch)\("([^"]+)"\)\]',
     re.IGNORECASE,
 )
+TAURI_COMMAND = re.compile(
+    r'#\[tauri::command\]\s*(?:pub(?:\(crate\))?\s+)?(?:async\s+)?fn\s+(\w+)',
+    re.MULTILINE,
+)
 
 RUST_EXTENSIONS = {".rs"}
 
@@ -190,6 +194,21 @@ class RustScanner(BaseScanner):
                 source_file=rel_path,
                 source_line=line,
             ))
+
+        # Detect #[tauri::command] functions
+        for match in TAURI_COMMAND.finditer(source):
+            cmd_name = match.group(1)
+            line = source[:match.start()].count("\n") + 1
+            node_id, _ = await self._track_node(NodeCreateInput(
+                name=cmd_name,
+                type=NodeType.route,
+                status=NodeStatus.built,
+                parent_id=self.root_id,
+                metadata={"tauri_command": True, "ipc": True},
+                source_file=rel_path,
+                source_line=line,
+            ))
+            self._type_node_ids[cmd_name] = node_id
 
         # Detect mod declarations
         for match in MOD_PATTERN.finditer(source):

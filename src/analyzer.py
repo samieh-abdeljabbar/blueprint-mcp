@@ -250,16 +250,29 @@ def _check_single_point_of_failure(
             parent[n.id] = None
             dfs(n.id)
 
+    # Entry points are always articulation points but flagging them is noise
+    entry_point_types = {"system"}
+    entry_point_names = {"main", "app", "index", "root"}
     for nid in ap:
         n = node_map.get(nid)
-        if n:
-            issues.append(Issue(
-                severity=IssueSeverity.warning,
-                type="single_point_of_failure",
-                message=f"'{n.name}' is a single point of failure (articulation point)",
-                node_ids=[nid],
-                suggestion=f"Add redundancy for '{n.name}' to avoid single point of failure",
-            ))
+        if not n:
+            continue
+        # Skip system-level nodes (project roots)
+        if n.type.value in entry_point_types:
+            continue
+        # Skip common entry point names
+        if n.name.lower() in entry_point_names:
+            continue
+        # Skip nodes explicitly marked as entry points
+        if n.metadata and n.metadata.get("entry_point"):
+            continue
+        issues.append(Issue(
+            severity=IssueSeverity.warning,
+            type="single_point_of_failure",
+            message=f"'{n.name}' is a single point of failure (articulation point)",
+            node_ids=[nid],
+            suggestion=f"Add redundancy for '{n.name}' to avoid single point of failure",
+        ))
     return issues
 
 

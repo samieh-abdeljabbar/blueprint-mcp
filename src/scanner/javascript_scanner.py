@@ -50,6 +50,7 @@ from src.scanner.js_patterns import (
     REACT_EXPORT_NAMED,
     REACT_MEMO,
     ROUTE_PATTERN,
+    TAURI_INVOKE,
     TYPEORM_ENTITY,
     USE_DIRECTIVE,
 )
@@ -73,6 +74,8 @@ class JavaScriptScanner(BaseScanner):
         self._route_node_ids: dict[str, str] = {}
         # Deferred API call edges (source_rel_path, api_path)
         self._deferred_api_edges: list[tuple[str, str]] = []
+        # Deferred Tauri invoke edges (source_rel_path, command_name)
+        self._deferred_invoke_edges: list[tuple[str, str]] = []
         # Path alias resolution
         self._path_aliases = parse_path_aliases(path)
 
@@ -555,11 +558,16 @@ class JavaScriptScanner(BaseScanner):
             self._module_node_ids[rel_path] = node_id
 
     async def _detect_api_calls(self, source: str, rel_path: str):
-        """Detect fetch/axios calls to /api/... paths."""
+        """Detect fetch/axios calls to /api/... paths and Tauri invoke() calls."""
         for pattern in (FETCH_API_CALL, AXIOS_API_CALL):
             for match in pattern.finditer(source):
                 api_path = match.group(1)
                 self._deferred_api_edges.append((rel_path, api_path))
+
+        # Tauri invoke("command_name") -> deferred edge to Rust command
+        for match in TAURI_INVOKE.finditer(source):
+            cmd_name = match.group(1)
+            self._deferred_invoke_edges.append((rel_path, cmd_name))
 
     async def _scan_prisma_file(self, filepath: str, project_root: str):
         """Scan .prisma files for model definitions."""
@@ -690,3 +698,23 @@ class JavaScriptScanner(BaseScanner):
                         target_id=tgt_id,
                         relationship=EdgeRelationship.uses,
                     ))
+
+        # Tauri invoke() edges -> calls to #[tauri::command] Rust functions
+        if self._deferred_invoke_edges:
+            all_nodes = await self.db.get_all_nodes()
+            tauri_cmds = {
+                n.name: n.id for n in all_nodes
+                if n.metadata and n.metadata.get("tauri_command")
+            }
+            for src_path, cmd_name in self._deferred_invoke_edges:
+                src_id = self._module_node_ids.get(src_path)
+                tgt_id = tauri_cmds.get(cmd_name)
+                if src_id and tgt_id:
+                    edge_key = (src_id, tgt_id)
+                    if edge_key not in seen_edges:
+                        seen_edges.add(edge_key)
+                        await self._track_edge(EdgeCreateInput(
+                            source_id=src_id,
+                            target_id=tgt_id,
+                            relationship=EdgeRelationship.calls,
+                        ))
