@@ -79,7 +79,9 @@ async def _build_data_json(db: Database) -> tuple[str, dict]:
 
 def _generate_html(data_json: str, theme: str) -> str:
     """Assemble the complete HTML string with embedded data and D3.js visualization."""
-    return _HTML_TEMPLATE.replace("__BLUEPRINT_DATA__", data_json).replace(
+    # Escape </script> to prevent XSS if any node data contains it (OWASP recommendation)
+    safe_json = data_json.replace("</", "<\\/")
+    return _HTML_TEMPLATE.replace("__BLUEPRINT_DATA__", safe_json).replace(
         "__THEME__", theme
     )
 
@@ -1968,7 +1970,7 @@ function renderNodeDetail(nd) {
       if (e.label) item += '<div class="conn-edge-label">\u201C' + esc(e.label) + '\u201D</div>';
       var ctxExpl = getContextualEdgeExplanation(e.relationship, nd.name, otherName, isSrc);
       if (ctxExpl) item += '<div class="conn-context">' + esc(ctxExpl) + '</div>';
-      if (RELATIONSHIP_HELP[e.relationship]) item += '<div class="conn-explanation">' + RELATIONSHIP_HELP[e.relationship] + '</div>';
+      if (RELATIONSHIP_HELP[e.relationship]) item += '<div class="conn-explanation">' + esc(RELATIONSHIP_HELP[e.relationship]) + '</div>';
       item += '</div>';
       return item;
     }
@@ -3046,6 +3048,8 @@ function renderOverview() {
   tickCount = 0;
 
   var allOvNodes = overviewNodes;
+  var ovNodeMap = {};
+  allOvNodes.forEach(function(n) { ovNodeMap[n.id] = n; });
   simulation = d3.forceSimulation(allOvNodes)
     .force('charge', d3.forceManyBody().strength(-600).distanceMax(800))
     .force('center', d3.forceCenter(gW / 2, gH / 2).strength(0.05))
@@ -3069,20 +3073,20 @@ function renderOverview() {
 
       /* Position aggregated edges (both hit-zone and visible lines) */
       aggEdgeGroups.selectAll('line')
-        .attr('x1', function(d) { var n = allOvNodes.find(function(n) { return n.id === d.source.id || n.id === d.source; }); return n ? n.x : 0; })
-        .attr('y1', function(d) { var n = allOvNodes.find(function(n) { return n.id === d.source.id || n.id === d.source; }); return n ? n.y : 0; })
-        .attr('x2', function(d) { var n = allOvNodes.find(function(n) { return n.id === d.target.id || n.id === d.target; }); return n ? n.x : 0; })
-        .attr('y2', function(d) { var n = allOvNodes.find(function(n) { return n.id === d.target.id || n.id === d.target; }); return n ? n.y : 0; });
+        .attr('x1', function(d) { var n = ovNodeMap[d.source.id || d.source]; return n ? n.x : 0; })
+        .attr('y1', function(d) { var n = ovNodeMap[d.source.id || d.source]; return n ? n.y : 0; })
+        .attr('x2', function(d) { var n = ovNodeMap[d.target.id || d.target]; return n ? n.x : 0; })
+        .attr('y2', function(d) { var n = ovNodeMap[d.target.id || d.target]; return n ? n.y : 0; });
 
       aggEdgeGroups.select('text')
         .attr('x', function(d) {
-          var s = allOvNodes.find(function(n) { return n.id === (d.source.id || d.source); });
-          var t = allOvNodes.find(function(n) { return n.id === (d.target.id || d.target); });
+          var s = ovNodeMap[d.source.id || d.source];
+          var t = ovNodeMap[d.target.id || d.target];
           return s && t ? (s.x + t.x) / 2 : 0;
         })
         .attr('y', function(d) {
-          var s = allOvNodes.find(function(n) { return n.id === (d.source.id || d.source); });
-          var t = allOvNodes.find(function(n) { return n.id === (d.target.id || d.target); });
+          var s = ovNodeMap[d.source.id || d.source];
+          var t = ovNodeMap[d.target.id || d.target];
           return s && t ? (s.y + t.y) / 2 : 0;
         });
 
