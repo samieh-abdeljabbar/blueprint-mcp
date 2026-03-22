@@ -9,3 +9,4 @@ dist/
 .pytest_cache/
 viewer/node_modules/
 viewer/dist/
+tests/fixtures/swift_project/.build/
