@@ -40,8 +40,8 @@ ROUTE_MACRO = re.compile(
     re.IGNORECASE,
 )
 TAURI_COMMAND = re.compile(
-    r'#\[tauri::command\]\s*(?:pub(?:\(crate\))?\s+)?(?:async\s+)?fn\s+(\w+)',
-    re.MULTILINE,
+    r'#\[tauri::command\](?:\s*#\[.*?\])*\s*(?:pub(?:\(crate\))?\s+)?(?:async\s+)?fn\s+(\w+)',
+    re.MULTILINE | re.DOTALL,
 )
 
 RUST_EXTENSIONS = {".rs"}
@@ -55,28 +55,34 @@ class RustScanner(BaseScanner):
         self._deferred_impl_edges: list[tuple[str, str]] = []  # (trait, struct)
         self._deferred_mod_edges: list[tuple[str, str]] = []  # (file_path, mod_name)
 
-        # Parse Cargo.toml
-        await self._scan_cargo_toml(path)
+        # For Tauri projects, scan src-tauri/ if Cargo.toml is not at root
+        scan_root = path
+        tauri_dir = os.path.join(path, "src-tauri")
+        if not os.path.isfile(os.path.join(path, "Cargo.toml")) and os.path.isdir(tauri_dir):
+            scan_root = tauri_dir
 
-        for dirpath, dirnames, filenames in os.walk(path):
+        # Parse Cargo.toml
+        await self._scan_cargo_toml(scan_root)
+
+        for dirpath, dirnames, filenames in os.walk(scan_root):
             dirnames[:] = [
                 d for d in dirnames
-                if not self.should_ignore(os.path.join(dirpath, d), path)
+                if not self.should_ignore(os.path.join(dirpath, d), scan_root)
             ]
             for fname in filenames:
                 if os.path.splitext(fname)[1] not in RUST_EXTENSIONS:
                     continue
                 full = os.path.join(dirpath, fname)
-                if self.should_ignore(full, path):
+                if self.should_ignore(full, scan_root):
                     continue
-                await self._scan_file(full, path)
+                await self._scan_file(full, scan_root)
                 self._files_scanned += 1
 
         # Create deferred edges
         await self._create_deferred_edges()
 
         # Create directory hierarchy
-        await self._create_directory_parents(path)
+        await self._create_directory_parents(scan_root)
 
         return self._build_result("rust_scanner", start)
 

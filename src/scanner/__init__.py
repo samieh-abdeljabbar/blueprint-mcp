@@ -52,7 +52,9 @@ async def scan_project(
     if languages:
         scanner_names = [l for l in languages if l in SCANNER_MAP]
     else:
-        scanner_names = [l for l in project_info.languages if l in SCANNER_MAP]
+        # Use SCANNER_MAP key order (e.g., rust before js for Tauri IPC linking)
+        detected = set(project_info.languages)
+        scanner_names = [l for l in SCANNER_MAP if l in detected]
 
     # Step 3: Run each scanner
     results: list[ScanResult] = []

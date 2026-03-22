@@ -76,6 +76,12 @@ def _detect_languages(project_path: str) -> list[str]:
         if any(ind in entries for ind in indicators):
             languages.append(lang)
 
+    # Detect Rust in src-tauri/ (Tauri desktop apps)
+    if "rust" not in languages:
+        tauri_cargo = os.path.join(project_path, "src-tauri", "Cargo.toml")
+        if os.path.isfile(tauri_cargo):
+            languages.append("rust")
+
     # Detect sql language from directory presence
     if "sql" not in languages:
         sql_dirs = {"prisma", "migrations", "alembic"}

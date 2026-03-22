@@ -565,9 +565,11 @@ class JavaScriptScanner(BaseScanner):
                 self._deferred_api_edges.append((rel_path, api_path))
 
         # Tauri invoke("command_name") -> deferred edge to Rust command
-        for match in TAURI_INVOKE.finditer(source):
-            cmd_name = match.group(1)
-            self._deferred_invoke_edges.append((rel_path, cmd_name))
+        # Only detect invoke() in files that import from @tauri-apps
+        if re.search(r"""from\s+['"]@tauri-apps/""", source):
+            for match in TAURI_INVOKE.finditer(source):
+                cmd_name = match.group(1)
+                self._deferred_invoke_edges.append((rel_path, cmd_name))
 
     async def _scan_prisma_file(self, filepath: str, project_root: str):
         """Scan .prisma files for model definitions."""
