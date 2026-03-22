@@ -4,9 +4,9 @@
 
 Blueprint MCP is a [Model Context Protocol](https://modelcontextprotocol.io/) server that gives Claude Code a persistent understanding of your project's architecture. It tracks every component — services, databases, APIs, routes, tables, functions — their connections, and their build status in a local SQLite database that travels with your project.
 
-Scan existing codebases to auto-detect architecture, apply starter templates, find architectural issues, trace data flows, simulate what-if scenarios, and export to Mermaid, Graphviz, JSON, CSV, or Markdown.
+Scan existing codebases to auto-detect architecture, visualize your system with an interactive X-Ray viewer, find architectural issues, trace data flows, simulate what-if scenarios, and export to Mermaid, Graphviz, JSON, CSV, or Markdown.
 
-**38 MCP tools | 309 tests | 6 templates | 9 language scanners | 10 architectural checks**
+**38 MCP tools | 334 tests | 6 templates | 9 language scanners | 10 architectural checks | Interactive X-Ray visualization**
 
 ---
 
@@ -15,10 +15,11 @@ Scan existing codebases to auto-detect architecture, apply starter templates, fi
 - [Installation](#installation)
 - [Global Setup (Recommended)](#global-setup-recommended)
 - [Quick Start](#quick-start)
+- [X-Ray Visualization](#x-ray-visualization)
 - [All 38 MCP Tools](#all-38-mcp-tools)
-- [Templates](#templates)
 - [Scanner](#scanner)
 - [Analyzer](#analyzer)
+- [Templates](#templates)
 - [CLI](#cli)
 - [Using Blueprint in Your Workflow](#using-blueprint-in-your-workflow)
 - [Development](#development)
@@ -113,8 +114,6 @@ cd '"$(pwd)"' && .venv/bin/python -m src.server' > ~/blueprint-mcp.sh
 chmod +x ~/blueprint-mcp.sh
 ```
 
-This creates a small script that starts the Blueprint server from the correct directory with the correct Python environment, no matter where you run Claude Code from.
-
 ### Step 2: Add to Each Project
 
 Create a `.mcp.json` file in any project root:
@@ -133,7 +132,7 @@ Create a `.mcp.json` file in any project root:
 }
 ```
 
-Replace `/path/to/your/home/` with your actual home directory path (e.g., `/Users/yourname/blueprint-mcp.sh`) and `/absolute/path/to/this/project` with the project's absolute path.
+Replace the paths with your actual home directory and project paths.
 
 Or use this one-liner from any project directory:
 
@@ -143,20 +142,7 @@ echo '{"mcpServers":{"blueprint":{"command":"bash","args":["'$HOME'/blueprint-mc
 
 ### Step 3: Verify
 
-Open Claude Code in any project with the `.mcp.json` file:
-
-```bash
-cd ~/your-project
-claude
-```
-
-Run `/mcp` — Blueprint should show connected. Then:
-
-```
-List the available blueprint templates
-```
-
-If Claude responds with template names, you're set.
+Open Claude Code in any project with the `.mcp.json` file and run `/mcp` — Blueprint should show connected.
 
 ### Step 4: First-Time Setup Per Project
 
@@ -168,7 +154,7 @@ Scan this codebase and populate the blueprint
 
 This creates the database and detects your project's architecture automatically.
 
-> **Tip:** Add `.blueprint.db` to your global gitignore if you don't want blueprint databases committed:
+> **Tip:** Add `.blueprint.db` to your global gitignore:
 > ```bash
 > echo ".blueprint.db" >> ~/.gitignore_global
 > git config --global core.excludesfile ~/.gitignore_global
@@ -178,10 +164,9 @@ This creates the database and detects your project's architecture automatically.
 
 | Problem | Cause | Fix |
 |---------|-------|-----|
-| `/mcp` shows failed | Launcher script not found | Verify `~/blueprint-mcp.sh` exists and is executable: `ls -la ~/blueprint-mcp.sh` |
-| `/mcp` shows failed | Wrong Python path | Run `bash ~/blueprint-mcp.sh` manually — if it shows the FastMCP banner, the script is fine |
-| `/mcp` shows `Command: python` | Old config overriding `.mcp.json` | Check `~/.claude.json` for stale blueprint entries and remove them |
-| Server starts but tools don't work | Missing dependencies | Run `cd /path/to/blueprint-mcp && pip install -e ".[dev]"` in the venv |
+| `/mcp` shows failed | Launcher script not found | Verify `~/blueprint-mcp.sh` exists and is executable |
+| `/mcp` shows failed | Wrong Python path | Run `bash ~/blueprint-mcp.sh` manually to verify |
+| Server starts but tools don't work | Missing dependencies | Run `pip install -e ".[dev]"` in the venv |
 | "Failed to reconnect" on restart | Cached config | Fully quit terminal, reopen, and run `claude` fresh |
 
 ---
@@ -191,15 +176,45 @@ This creates the database and detects your project's architecture automatically.
 After installing, try these commands inside Claude Code:
 
 ```
-1. Apply the saas template for "My App"
-2. Show me the blueprint summary
-3. Find architectural issues in the blueprint
-4. What connects to the database?
-5. Trace the flow from the API gateway
-6. What if we removed the cache?
-7. Show me the project health score
-8. Export the blueprint as a Mermaid diagram
+1. "Scan this codebase and populate the blueprint"
+2. "Show me the blueprint summary"
+3. "Render the X-Ray visualization"
+4. "Find architectural issues"
+5. "What connects to the database?"
+6. "Trace the flow from the API gateway"
+7. "What if we removed the cache?"
+8. "Show me the project health score"
+9. "Export the blueprint as a Mermaid diagram"
 ```
+
+---
+
+## X-Ray Visualization
+
+The `render_blueprint` tool generates a self-contained HTML file with an interactive architecture visualization powered by D3.js. Open it in any browser — no server needed.
+
+### Three-Level Drill-Down
+
+- **Level 1 — Overview:** Group cards showing project sections (directories/modules). Cards are colored by dominant content type. Lines between groups show connection counts with hover tooltips explaining what each connection means.
+- **Level 2 — Group:** Drill into any group to see all its components. Ghost nodes show external connections to other groups. Edges use relationship-specific dash patterns and colors.
+- **Level 3 — Focus:** Double-click any component to see its direct connections in a radial layout with all edge labels visible.
+
+### Right Panel Tabs
+
+- **Details:** Click any node for full info — type explanation, status, source file, connections with contextual descriptions ("ContentView depends on UserViewModel via @StateObject"). Includes a "What does this mean?" section with plain-English explanations for beginners.
+- **Health:** All architectural issues sorted by severity. Click any issue to highlight the affected nodes on the graph and zoom to them.
+- **Questions:** Architectural questions grouped by category (security, completeness, data flow, reliability, testing) with fix prompts.
+- **Layers:** Architecture breakdown showing how your app is organized from top to bottom — UI, App Structure, Core Logic, Geometry, Topology, Import/Export, API, Data Layer. Click any group pill to navigate there.
+
+### Additional Features
+
+- Light/dark theme toggle
+- Search bar to find nodes by name
+- Category filter buttons to show/hide node types
+- Minimap for orientation in large graphs
+- Breadcrumb navigation with keyboard shortcuts (Escape/Backspace to go back)
+- 3-step onboarding walkthrough for first-time users
+- Legend panel with color, status, and edge pattern reference
 
 ---
 
@@ -275,7 +290,7 @@ After installing, try these commands inside Claude Code:
 
 | Tool | Description |
 |------|-------------|
-| `render_blueprint` | Generate a self-contained HTML visualization with D3.js |
+| `render_blueprint` | Generate a self-contained HTML X-Ray visualization with D3.js |
 
 ### Snapshots (4 tools)
 
@@ -321,52 +336,29 @@ After installing, try these commands inside Claude Code:
 
 ---
 
-## Templates
-
-Six starter templates cover common architectures. All nodes are created with `status: planned` so you can track progress as you build.
-
-| Template | Description | Nodes | Edges |
-|----------|-------------|-------|-------|
-| `saas` | Auth, billing, API, database, cache, queue, frontend, email | 12 | 8 |
-| `api_service` | Standalone API with database, auth, health check, config | 9 | 6 |
-| `fullstack` | Frontend, backend API, database with 5 tables, cache, CDN | 13 | 9 |
-| `data_pipeline` | ETL/ELT with ingestion, transformation, warehouse, monitoring | 9 | 7 |
-| `desktop_app` | Tauri/Electron shell, UI, local database, IPC, auto-updater | 8 | 5 |
-| `multi_entity_business` | Multi-location business with POS, payroll, compliance, BI | 20 | 17 |
-
-### Example
-
-Ask Claude Code:
-
-```
-Apply the api_service template for "User Service"
-```
-
-Creates 9 planned components (API server, health check, auth middleware, database, 3 tables, config) with 6 edges. As you build each part, Claude updates statuses to `built`.
-
----
-
 ## Scanner
 
 The scanner auto-detects architecture from existing codebases. It's **non-destructive** (adds/updates only, never deletes) and **idempotent** (running twice doesn't create duplicates).
 
+All scanners automatically create **directory hierarchy nodes** — grouping files into parent directories so the X-Ray viewer shows meaningful clusters instead of a flat list.
+
 | Language | Method | Detects |
 |----------|--------|---------|
-| **Python** | AST parsing | FastAPI/Flask/Django apps, routes, SQLAlchemy/Django models, Pydantic models, Celery tasks, imports, classes, protocols |
-| **JavaScript/TypeScript** | Regex | Express/Next.js/React routes & components, Prisma/Drizzle/TypeORM models, Vue SFCs, class inheritance, package.json |
+| **Python** | AST parsing | FastAPI/Flask/Django apps, routes, SQLAlchemy/Django models, Pydantic models, Celery tasks, imports, classes, protocols, directory hierarchy |
+| **JavaScript/TypeScript** | Regex | Express/Next.js/React routes & components, Prisma/Drizzle/TypeORM models, Vue SFCs, class inheritance, import edges, path alias resolution, directory hierarchy |
+| **Swift** | Regex | SwiftUI views, structs, ObservableObject classes, protocols, enums, @main app entry, SPM targets, property type dependencies, @StateObject/@ObservedObject/@EnvironmentObject edges, init call edges, extension conformance, directory hierarchy |
 | **SQL/Database** | Regex | CREATE TABLE with columns, foreign keys, views with source edges, indexes, triggers, functions, ALTER TABLE FK |
-| **Prisma** | Regex | Datasource → database node, models → tables, fields → columns, `@relation` → edges |
+| **Prisma** | Regex | Datasource, models, fields, columns, `@relation` edges |
 | **ORM Migrations** | Regex | Django migrations (CreateModel, ForeignKey), Alembic (op.create_table, ForeignKeyConstraint) |
-| **TypeORM** | Regex | @Entity → tables, @Column → columns, @ManyToOne/@OneToMany → edges |
-| **Knex/Sequelize** | Regex | createTable → tables, .references().inTable() → FK edges |
-| **Connection Strings** | Regex | DATABASE_URL → database, REDIS_URL → cache (credentials never stored) |
+| **TypeORM** | Regex | @Entity tables, @Column columns, @ManyToOne/@OneToMany edges |
+| **Knex/Sequelize** | Regex | createTable tables, .references().inTable() FK edges |
+| **Connection Strings** | Regex | DATABASE_URL, REDIS_URL (credentials never stored) |
 | **Docker** | YAML/text | Dockerfile images & ports, docker-compose services, depends_on edges |
-| **Swift** | Regex | SwiftUI views, structs, ObservableObject classes, protocols, SPM targets |
-| **Rust** | Regex | Structs, traits, enums, impl blocks, Actix/Axum routes, Cargo.toml deps |
-| **Go** | Regex | Structs, interfaces, HTTP handlers, packages, go.mod deps |
+| **Rust** | Regex | Structs, traits, enums, impl blocks, Actix/Axum routes, Cargo.toml deps, directory hierarchy |
+| **Go** | Regex | Structs, interfaces, HTTP handlers, packages, go.mod deps, directory hierarchy |
 | **Config/IaC** | YAML/HCL/text | Kubernetes manifests, Terraform resources, GraphQL schemas, GitHub Actions, .env files |
 
-The scanner respects `.gitignore` and always skips `.git/`, `node_modules/`, `__pycache__/`, `.venv/`.
+The scanner respects `.gitignore` and always skips `.git/`, `node_modules/`, `__pycache__/`, `.venv/`, `.build/`, `DerivedData/`.
 
 ---
 
@@ -384,8 +376,25 @@ The scanner respects `.gitignore` and always skips `.git/`, `node_modules/`, `__
 | Missing authentication | Warning | API/route nodes with no `authenticates` edge |
 | Single point of failure | Warning | Nodes whose removal disconnects the graph (Tarjan's algorithm) |
 | Stale nodes | Warning | Nodes referencing missing source files |
-| Unused modules | Info | Modules with no connections |
+| Unused modules | Info | Modules with no connections (skips directory group nodes) |
 | Missing descriptions | Info | Nodes without descriptions |
+
+In the X-Ray viewer, clicking any health issue highlights the affected nodes on the graph and zooms to them.
+
+---
+
+## Templates
+
+Six starter templates cover common architectures. All nodes are created with `status: planned` so you can track progress as you build.
+
+| Template | Description | Nodes | Edges |
+|----------|-------------|-------|-------|
+| `saas` | Auth, billing, API, database, cache, queue, frontend, email | 12 | 8 |
+| `api_service` | Standalone API with database, auth, health check, config | 9 | 6 |
+| `fullstack` | Frontend, backend API, database with 5 tables, cache, CDN | 13 | 9 |
+| `data_pipeline` | ETL/ELT with ingestion, transformation, warehouse, monitoring | 9 | 7 |
+| `desktop_app` | Tauri/Electron shell, UI, local database, IPC, auto-updater | 8 | 5 |
+| `multi_entity_business` | Multi-location business with POS, payroll, compliance, BI | 20 | 17 |
 
 ---
 
@@ -434,19 +443,19 @@ blueprint-mcp export --format markdown
 4. "Find issues in the blueprint"
    -> Catches orphaned tables, missing auth, circular deps
 
-5. "What's the project health score?"
-   -> 0-100 score with letter grade
+5. "Render the X-Ray visualization"
+   -> Opens interactive viewer in your browser
 ```
 
-### Existing Project: Scan -> Review -> Fix
+### Existing Project: Scan -> Visualize -> Fix
 
 ```
 1. "Scan this codebase and populate the blueprint"
-2. "Show me the blueprint summary"
-3. "Find critical issues"
-4. "Trace the flow from the API entry point"
-5. "What if we removed the auth service?"
-6. "Export the blueprint as Mermaid"
+2. "Render the X-Ray visualization"
+3. "Show me the blueprint summary"
+4. "Find critical issues"
+5. "Trace the flow from the API entry point"
+6. "What if we removed the auth service?"
 ```
 
 ### Auto-Register Components
@@ -478,28 +487,29 @@ source .venv/bin/activate
 pytest tests/ -v
 ```
 
-**309 tests** across 17 test files:
+**334 tests** across 19 test files:
 
 | File | Tests | Coverage |
 |------|-------|----------|
-| `test_server.py` | 21 | Node/edge CRUD, blueprint queries, changelog, extended types |
-| `test_templates.py` | 28 | Template loading, validation, application, multi-template |
-| `test_scanner.py` | 120 | Python/JS/Docker/Swift/Rust/Go/Config/SQL scanners, idempotency, edge cases |
+| `test_scanner.py` | 140 | Python/JS/Docker/Swift/Rust/Go/Config/SQL scanners, edges, hierarchy, idempotency |
+| `test_server.py` | 51 | Node/edge CRUD, blueprint queries, changelog, extended types |
+| `test_templates.py` | 23 | Template loading, validation, application, multi-template |
 | `test_analyzer.py` | 20 | All 10 checks with positive and negative cases |
+| `test_xray.py` | 17 | HTML visualization, themes, D3 embedding, legend, onboarding, drill-down |
+| `test_questions.py` | 11 | Security, completeness, data flow, reliability gap detection |
 | `test_tracer.py` | 11 | Entry points, linear flow, branches, cycles, gaps |
-| `test_impact.py` | 6 | Upstream/downstream/both cascade analysis |
-| `test_whatif.py` | 5 | Remove, break, disconnect, overload scenarios |
-| `test_questions.py` | 6 | Security, completeness, data flow gap detection |
-| `test_review.py` | 3 | Review prompt generation |
-| `test_xray.py` | 11 | HTML visualization, themes, D3 embedding, legend, onboarding |
+| `test_models_descriptions.py` | 9 | Node type, status, edge relationship descriptions |
+| `test_impact.py` | 7 | Upstream/downstream/both cascade analysis |
 | `test_snapshots.py` | 6 | Save, restore, compare, confirm safety |
-| `test_export.py` | 5 | Mermaid, Markdown, JSON, CSV, DOT formats |
-| `test_health.py` | 6 | Node scoring, project grades, edge cases |
-| `test_stale.py` | 3 | Missing files, stale planned nodes |
+| `test_export.py` | 6 | Mermaid, Markdown, JSON, CSV, DOT formats |
+| `test_health.py` | 5 | Node scoring, project grades, edge cases |
+| `test_whatif.py` | 5 | Remove, break, disconnect, overload scenarios |
 | `test_query.py` | 5 | Natural language parsing, keyword matching |
-| `test_cli.py` | 3 | CLI subcommand parsing and execution |
-| `test_projects.py` | 3 | Cross-project linking |
+| `test_review.py` | 4 | Review prompt generation |
+| `test_cli.py` | 4 | CLI subcommand parsing and execution |
 | `test_annotations.py` | 4 | Annotations CRUD, cost reports |
+| `test_stale.py` | 3 | Missing files, stale planned nodes |
+| `test_projects.py` | 3 | Cross-project linking |
 
 ### Adding a New MCP Tool
 
@@ -513,8 +523,9 @@ pytest tests/ -v
 
 1. Create `src/scanner/{name}_scanner.py` extending `BaseScanner`
 2. Use `self._track_node()` / `self._track_edge()` for dedup
-3. Register in `src/scanner/__init__.py`
-4. Add fixtures in `tests/fixtures/` and tests in `tests/test_scanner.py`
+3. Call `await self._create_directory_parents(path)` before returning for automatic directory grouping
+4. Register in `src/scanner/__init__.py`
+5. Add fixtures in `tests/fixtures/` and tests in `tests/test_scanner.py`
 
 ### Adding a New Template
 
@@ -545,15 +556,15 @@ blueprint-mcp/
 │   ├── query.py             # Natural language queries
 │   ├── projects.py          # Cross-project linking
 │   ├── annotations.py       # Key-value annotations & cost reports
-│   ├── xray.py              # HTML visualization (D3.js)
+│   ├── xray.py              # Self-contained HTML visualization (D3.js)
 │   ├── cli.py               # CLI entry point
 │   ├── scanner/
 │   │   ├── __init__.py      # Orchestrator — coordinates all scanners
-│   │   ├── base.py          # Abstract base with dedup helpers
+│   │   ├── base.py          # Abstract base with dedup + directory hierarchy
 │   │   ├── python_scanner.py    # AST-based Python analysis
 │   │   ├── javascript_scanner.py # Regex-based JS/TS analysis
 │   │   ├── docker_scanner.py    # Dockerfile + compose parsing
-│   │   ├── swift_scanner.py     # Swift/SwiftUI analysis
+│   │   ├── swift_scanner.py     # Swift/SwiftUI analysis (2-phase: types + edges)
 │   │   ├── rust_scanner.py      # Rust analysis
 │   │   ├── go_scanner.py        # Go analysis
 │   │   ├── config_scanner.py    # K8s, Terraform, GraphQL, GitHub Actions
@@ -562,9 +573,8 @@ blueprint-mcp/
 │   └── templates/
 │       ├── registry.py      # Template loading & application
 │       └── *.json           # 6 starter templates
-├── tests/                   # 309 tests across 17 files
+├── tests/                   # 334 tests across 19 files
 │   └── fixtures/            # Sample projects for scanner tests
-├── viewer/                  # React + ReactFlow frontend (optional)
 └── pyproject.toml           # Python 3.11+, all deps
 ```
 

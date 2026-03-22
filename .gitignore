@@ -10,3 +10,5 @@ dist/
 viewer/node_modules/
 viewer/dist/
 tests/fixtures/swift_project/.build/
+.blueprint.html
+*.blueprint.db

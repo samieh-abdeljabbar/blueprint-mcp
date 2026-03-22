@@ -489,6 +489,8 @@ html, body {
   border-left: 3px solid;
   font-size: 13px;
   line-height: 1.5;
+  cursor: pointer;
+  transition: background 0.15s;
 }
 .issue-card.critical { background: var(--issue-critical-bg); border-color: var(--issue-critical-border); }
 .issue-card.warning  { background: var(--issue-warning-bg);  border-color: var(--issue-warning-border);  }
@@ -2046,7 +2048,7 @@ function renderHealth() {
   }
 
   sorted.forEach(issue => {
-    h += '<div class="issue-card ' + issue.severity + '">';
+    h += '<div class="issue-card ' + issue.severity + '" data-highlight=\'' + JSON.stringify(issue.node_ids || []) + '\'>';
     h += '<div class="issue-type">' + esc(issue.type) + '</div>';
     h += '<div class="issue-msg">'  + esc(issue.message) + '</div>';
     if (issue.suggestion)
@@ -2057,6 +2059,14 @@ function renderHealth() {
   });
 
   document.getElementById('tab-health').innerHTML = h;
+
+  /* Click issue to highlight affected nodes on the graph */
+  document.querySelectorAll('.issue-card[data-highlight]').forEach(function(card) {
+    card.addEventListener('click', function() {
+      var ids = JSON.parse(card.dataset.highlight || '[]');
+      if (ids.length > 0) highlightNodes(ids);
+    });
+  });
 }
 
 /* ================================================================
