@@ -129,6 +129,11 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
   --search-bg: #ffffff;
   --tooltip-bg: #1a202c;
   --tooltip-text: #ffffff;
+  --card-tint-opacity: 0.06;
+  --card-border-opacity: 0.2;
+  --card-text: #1e293b;
+  --card-subtitle: #475569;
+  --card-stats: #64748b;
 }
 
 [data-theme="dark"] {
@@ -161,6 +166,11 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
   --search-bg: #24253a;
   --tooltip-bg: #c0caf5;
   --tooltip-text: #1a1b26;
+  --card-tint-opacity: 0.12;
+  --card-border-opacity: 0.3;
+  --card-text: #e2e8f0;
+  --card-subtitle: #94a3b8;
+  --card-stats: #64748b;
 }
 
 html, body {
@@ -271,11 +281,14 @@ html, body {
 .overview-card { cursor: pointer; }
 .overview-card:hover .card-bg { stroke-width: 2.5; filter: brightness(1.1); }
 .agg-edge-label { font-size: 11px; font-weight: 600; fill: var(--text-secondary); }
+.level-subtitle { pointer-events: none; }
 
 /* Ghost nodes (Level 2) */
-.ghost-node .node-rect { stroke-dasharray: 6 3; opacity: 0.35; }
-.ghost-node .node-name { opacity: 0.5; font-style: italic; }
-.ghost-label { font-size: 9px; fill: var(--text-muted); opacity: 0.5; }
+.ghost-node .node-rect { stroke-dasharray: 6 3; opacity: 0.55; }
+.ghost-node .node-name { opacity: 0.8; font-style: italic; }
+.ghost-label { font-size: 9px; fill: var(--text-muted); opacity: 0.7; }
+.ghost-edge .edge-line { stroke-dasharray: 8 4; opacity: 0.15; }
+.ghost-edge:hover .edge-line { opacity: 0.6; }
 
 /* Focus center (Level 3) */
 .focus-center .node-rect { stroke-width: 3; filter: drop-shadow(0 0 8px var(--accent)); }
@@ -366,6 +379,18 @@ html, body {
   margin-bottom: 4px;
   color: var(--text);
 }
+.explain-section { margin: 8px 0 12px; }
+.explain-toggle {
+  font-size: 12px; font-weight: 600;
+  color: var(--accent); background: none; border: none;
+  cursor: pointer; padding: 4px 0; display: block;
+}
+.explain-toggle:hover { text-decoration: underline; }
+.explain-body {
+  font-size: 12px; color: var(--text-secondary);
+  line-height: 1.6; padding: 8px 0 4px;
+}
+.explain-text { margin-bottom: 4px; }
 .node-detail .node-type-badge {
   display: inline-block;
   font-size: 11px;
@@ -481,41 +506,103 @@ html, body {
   font-size: 12px; color: var(--text-secondary);
   margin-top: 4px; font-style: italic;
 }
+.issue-explanation {
+  font-size: 11px; color: var(--text-muted);
+  margin-top: 6px; padding-top: 6px;
+  border-top: 1px solid var(--border-light); line-height: 1.5;
+}
 
 /* ================================================================
    QUESTIONS TAB
    ================================================================ */
-.question-card {
-  padding: 12px;
-  border-radius: 6px;
-  margin-bottom: 10px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-light);
-  cursor: pointer;
-  transition: border-color 0.15s;
+.questions-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
 }
-.question-card:hover { border-color: var(--accent); }
-.question-card .q-severity {
-  font-size: 10px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.5px;
+.questions-count {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.question-category {
+  padding: 8px 0;
+}
+.question-category-header {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  padding: 8px 16px 4px;
+}
+.question-card {
+  padding: 10px 16px;
+  margin: 4px 8px;
+  border-radius: 8px;
+  border-left: 3px solid var(--accent);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.question-card:hover {
+  background: var(--bg-tertiary);
+}
+.question-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
   margin-bottom: 4px;
 }
-.question-card .q-severity.critical { color: #e53e3e; }
-.question-card .q-severity.warning  { color: #d69e2e; }
-.question-card .q-severity.info     { color: #3182ce; }
-.question-card .q-text {
-  font-size: 14px; font-weight: 600;
-  color: var(--text); margin-bottom: 4px;
+.question-context {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
 }
-.question-card .q-context {
-  font-size: 12px; color: var(--text-secondary); line-height: 1.5;
+.question-fix {
+  font-size: 11px;
+  color: var(--accent);
+  margin-top: 4px;
 }
-.question-card .q-category {
-  display: inline-block; font-size: 10px;
-  padding: 1px 6px; border-radius: 8px;
-  background: var(--bg-tertiary); color: var(--text-muted);
-  margin-top: 6px;
+.question-learn {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+  margin-top: 2px;
 }
+
+/* ================================================================
+   LAYERS TAB
+   ================================================================ */
+.layers-container { padding: 16px; }
+.layers-title { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+.layers-subtitle { font-size: 12px; color: var(--text-muted); margin-bottom: 16px; }
+.layer-card {
+  padding: 12px 14px; margin-bottom: 4px; border-radius: 8px;
+  background: var(--bg-secondary); border-left: 4px solid;
+  transition: background 0.15s;
+}
+.layer-card:hover { background: var(--bg-tertiary); }
+.layer-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.layer-icon { font-size: 16px; }
+.layer-name { font-size: 14px; font-weight: 700; color: var(--text); flex: 1; }
+.layer-count {
+  font-size: 11px; color: var(--text-muted);
+  background: var(--bg-tertiary); padding: 2px 8px; border-radius: 10px;
+}
+.layer-description { font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; font-style: italic; }
+.layer-groups { display: flex; flex-wrap: wrap; gap: 4px; }
+.layer-group-pill {
+  font-size: 11px; padding: 2px 8px; border-radius: 4px;
+  background: var(--bg-tertiary); color: var(--text-secondary);
+  cursor: pointer; transition: all 0.15s;
+}
+.layer-group-pill:hover { background: var(--accent); color: #fff; }
+.layer-arrow { text-align: center; color: var(--text-muted); font-size: 14px; padding: 2px 0; opacity: 0.4; }
+.layers-flow-summary { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
+.flow-title { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+.flow-item { padding: 6px 0; border-bottom: 1px solid var(--border); }
+.flow-item:last-child { border-bottom: none; }
+.flow-path { font-size: 12px; font-weight: 600; color: var(--text); display: block; }
+.flow-desc { font-size: 11px; color: var(--text-muted); }
 
 /* ================================================================
    MINIMAP (200x150 bottom-right)
@@ -719,6 +806,7 @@ html, body {
 .conn-type-badge { font-size:9px; text-transform:uppercase; opacity:0.7; }
 .conn-warn { color:#e53e3e; font-size:12px; }
 .conn-edge-label { width:100%; font-size:10px; color:var(--text-secondary); font-style:italic; padding-left:10px; }
+.conn-context { width:100%; font-size:11px; color:var(--text-secondary); padding-left:10px; margin-top:2px; line-height:1.4; }
 .conn-explanation { width:100%; font-size:10px; color:var(--text-muted); padding-left:10px; }
 
 /* Back button */
@@ -833,6 +921,21 @@ html, body {
   transition: background 0.15s;
 }
 .onboarding-dismiss:hover { background: var(--accent-hover); }
+.onboarding-progress { display: flex; gap: 6px; margin-bottom: 16px; justify-content: center; }
+.onboarding-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--border); transition: all 0.2s;
+}
+.onboarding-dot.active { background: var(--accent); transform: scale(1.3); }
+.onboarding-dot.done { background: var(--accent); opacity: 0.5; }
+.onboarding-back {
+  flex: 0 0 auto; padding: 10px 16px;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg); color: var(--text-secondary);
+  font-size: 14px; font-weight: 600; cursor: pointer;
+  transition: all 0.15s;
+}
+.onboarding-back:hover { border-color: var(--accent); color: var(--accent); }
 </style>
 </head>
 <body>
@@ -899,11 +1002,13 @@ html, body {
       <button class="tab-btn active" data-tab="details">Details</button>
       <button class="tab-btn" data-tab="health">Health</button>
       <button class="tab-btn" data-tab="questions">Questions</button>
+      <button class="tab-btn" data-tab="layers">Layers</button>
     </div>
     <div class="tab-content">
       <div id="tab-details"   class="tab-pane active"></div>
       <div id="tab-health"    class="tab-pane"></div>
       <div id="tab-questions" class="tab-pane"></div>
+      <div id="tab-layers"    class="tab-pane"></div>
     </div>
   </div>
 </div>
@@ -913,6 +1018,9 @@ html, body {
   <div class="context-menu-item" id="ctx-focus">Focus (2-hop neighborhood)</div>
   <div class="context-menu-item" id="ctx-show-all">Show all</div>
 </div>
+
+<!-- Edge tooltip (hidden by default) -->
+<div id="edge-tooltip" style="display:none;position:fixed;background:var(--tooltip-bg);color:var(--tooltip-text);border-radius:8px;padding:10px 14px;font-size:12px;max-width:320px;z-index:1001;box-shadow:0 4px 16px var(--shadow-lg);pointer-events:none;line-height:1.6"></div>
 
 <!-- ============================================================
      JAVASCRIPT
@@ -949,6 +1057,28 @@ const TYPE_CATEGORIES = {
   'External':       { types: ['external','submodule'], color: '#ef4444' },
   'Testing':        { types: ['test'], color: '#14b8a6' }
 };
+
+function getTypeCategory(type) {
+  for (var cat in TYPE_CATEGORIES) {
+    if (TYPE_CATEGORIES[cat].types.indexOf(type) !== -1) return cat;
+  }
+  return 'Code';
+}
+
+function getGroupColor(group) {
+  var descendants = group._descendants || [];
+  var typeCounts = {};
+  descendants.forEach(function(n) {
+    var cat = getTypeCategory(n.type);
+    typeCounts[cat] = (typeCounts[cat] || 0) + 1;
+  });
+  var dominant = 'Code';
+  var maxCount = 0;
+  Object.entries(typeCounts).forEach(function(entry) {
+    if (entry[1] > maxCount) { maxCount = entry[1]; dominant = entry[0]; }
+  });
+  return TYPE_CATEGORIES[dominant] ? TYPE_CATEGORIES[dominant].color : '#3b82f6';
+}
 
 const NODE_SIZES = {
   system: [200,60], container: [200,60],
@@ -1020,6 +1150,136 @@ const EDGE_DASH = {
 const RELATIONSHIP_HELP = DATA.edge_relationship_descriptions || {};
 const NODE_TYPE_HELP = DATA.node_type_descriptions || {};
 const NODE_STATUS_HELP = DATA.node_status_descriptions || {};
+
+const ISSUE_TYPE_HELP = {
+  'orphaned_table': 'This database table exists but nothing reads from or writes to it. It may be leftover from a removed feature, or a new table not yet wired up.',
+  'broken_reference': 'A connection between two components is marked as broken. The link exists in the blueprint but is not functioning correctly.',
+  'missing_database': 'This service has URL routes but no database connection. Most services with routes need to store or retrieve data.',
+  'circular_dependency': 'Components depend on each other in a loop (A needs B, B needs C, C needs A). This makes them fragile and hard to change independently.',
+  'unimplemented_planned': 'This component was designed but never built. It is still marked as planned and may need implementation or removal.',
+  'missing_auth': 'This API endpoint or route has no authentication. Anyone who knows the URL could access it without restriction.',
+  'single_point_of_failure': 'If this component goes down, parts of the system become disconnected. It is a bottleneck with no backup path.',
+  'stale_node': 'This component references a source file that no longer exists on disk. The code may have been moved or deleted.',
+  'unused_module': 'This module is not connected to any other component. It may be dead code or a utility that was never integrated.',
+  'missing_description': 'This component has no description, making it harder for others to understand its purpose at a glance.'
+};
+
+const GROUP_DESCRIPTIONS = {
+  'src': 'Core application source code \u2014 the main logic lives here.',
+  'lib': 'Shared library code reused across the project.',
+  'ui': 'Reusable interface building blocks \u2014 buttons, inputs, cards, dialogs.',
+  'components': 'UI components that make up the visible interface.',
+  'pages': 'Top-level views that users navigate between.',
+  'views': 'Screen templates that define what the user sees.',
+  'api': 'Backend endpoints that handle requests and return data.',
+  'routes': 'URL paths mapped to handlers \u2014 the API surface area.',
+  'controllers': 'Request handlers that coordinate business logic.',
+  'models': 'Data structures representing domain entities.',
+  'schemas': 'Validation rules defining expected data shapes.',
+  'services': 'Business logic modules that orchestrate operations.',
+  'utils': 'Shared helper functions used throughout the codebase.',
+  'helpers': 'Utility code that simplifies common tasks.',
+  'config': 'Configuration files controlling app behavior and settings.',
+  'tests': 'Automated tests verifying the code works correctly.',
+  'test': 'Automated tests verifying the code works correctly.',
+  'middleware': 'Request processing layers that run before handlers.',
+  'hooks': 'Reusable lifecycle callbacks (React hooks, Git hooks, etc.).',
+  'store': 'State management \u2014 where app data is held in memory.',
+  'styles': 'CSS and styling definitions for the interface.',
+  'assets': 'Static files like images, fonts, and icons.',
+  'public': 'Publicly served static files.',
+  'scripts': 'Standalone executable scripts for tasks and automation.',
+  'migrations': 'Database schema changes applied in sequence.',
+  'types': 'TypeScript type definitions and interfaces.',
+  'db': 'Database access layer and query logic.',
+  'data': 'Data access, seeding, or fixture files.',
+  'shared': 'Components and utilities shared across features.',
+  'layout': 'Page structure \u2014 navigation bar, footer, and page skeleton.',
+  'home': 'Components that build the homepage.',
+  'about': 'The about page \u2014 company story and values.',
+  'contact': 'Contact page with form and contact info.',
+  'blog': 'Blog listing, cards, and category filtering.',
+  'admin': 'Admin dashboard for managing content.',
+  'app': 'The pages and routes users visit in their browser.',
+  'supabase': 'Connection to your Supabase database \u2014 reads and writes data.',
+  'content': 'Static content files \u2014 text, bios, testimonials.',
+  'infra': 'Infrastructure-as-code definitions.',
+  'deploy': 'Deployment configuration and scripts.',
+};
+
+function getGroupDescription(name) {
+  var lower = (name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  for (var key in GROUP_DESCRIPTIONS) {
+    if (lower === key || lower.endsWith(key) || lower.startsWith(key)) {
+      return GROUP_DESCRIPTIONS[key];
+    }
+  }
+  return null;
+}
+
+function getContextualEdgeExplanation(rel, srcName, tgtName, isSrc) {
+  var templates = {
+    'depends_on':    ['{s} requires {t} to work. If {t} breaks, {s} will fail.', '{t} is a dependency of {s}.'],
+    'calls':         ['{s} directly calls code in {t}.', '{t} is called by {s} at runtime.'],
+    'reads_from':    ['{s} reads data from {t}.', '{t} provides data to {s}.'],
+    'writes_to':     ['{s} sends data to {t} for storage.', '{t} receives data from {s}.'],
+    'uses':          ['{s} imports and uses code from {t}. If {t} is deleted, {s} will break.', '{t} provides functionality used by {s}.'],
+    'contains':      ['{t} lives inside {s}.', '{s} is contained within {t}.'],
+    'inherits':      ['{s} extends {t} and inherits its behavior.', '{t} is the base for {s}.'],
+    'implements':    ['{s} provides the concrete implementation of {t}.', '{t} is implemented by {s}.'],
+    'authenticates': ['{s} verifies identity through {t}.', '{t} handles auth for {s}.'],
+    'exposes':       ['{s} makes {t} available externally.', '{t} is exposed by {s}.'],
+    'creates':       ['{s} creates instances of {t}.', '{t} is created by {s}.'],
+    'produces':      ['{s} generates output consumed by {t}.', '{t} consumes what {s} produces.'],
+    'consumes':      ['{s} processes input from {t}.', '{t} feeds data into {s}.'],
+    'delegates':     ['{s} forwards work to {t} to handle.', '{t} handles work delegated by {s}.'],
+    'observes':      ['{s} watches for changes in {t} and reacts automatically.', '{t} is observed by {s}.'],
+    'connects_to':   ['{s} is connected to {t}.', '{t} is connected to {s}.'],
+    'controls':      ['{s} manages the lifecycle of {t}.', '{t} is controlled by {s}.'],
+    'updates':       ['{s} modifies state in {t}.', '{t} is updated by {s}.'],
+    'emits':         ['{s} sends events that {t} can listen for.', '{t} receives events from {s}.'],
+  };
+  var tpl = templates[rel];
+  if (!tpl) return null;
+  var text = isSrc ? tpl[0] : tpl[1];
+  return text.replace(/\{s\}/g, srcName).replace(/\{t\}/g, tgtName);
+}
+
+const NODE_EXPLAIN = {
+  'module': 'A module is a file that groups related code. Think of it like a chapter in a book \u2014 it contains functions, classes, or variables that work together for one purpose.',
+  'table': 'A database table is like a spreadsheet. Each row is a record, each column is a field. Other parts of your app read from and write to this table.',
+  'column': 'A column is a field in a database table \u2014 one piece of data stored for each record. Like a column header in a spreadsheet.',
+  'route': 'A route is a URL endpoint \u2014 when someone visits this path or an API call hits it, this code runs. It is the front door to a specific feature.',
+  'service': 'A service is a running program that handles business logic. It processes requests, talks to databases, and coordinates between other parts of your app.',
+  'database': 'A database stores all persistent data. When the app restarts, data in the database survives. Services read from and write to it.',
+  'function': 'A function is a reusable block of code that does one specific task. Other code calls it by name and gets a result back.',
+  'api': 'An API (Application Programming Interface) is a set of endpoints other programs can call. It defines what requests your app accepts and what responses it returns.',
+  'class_def': 'A class is a blueprint for creating objects. It bundles data (properties) and behavior (methods) together. Other code creates instances of it.',
+  'container': 'A container is a packaged, runnable unit (like Docker). It bundles code and dependencies so it runs the same everywhere.',
+  'queue': 'A queue holds messages waiting to be processed. Producers add messages, consumers pick them up later. This decouples fast writers from slow readers.',
+  'cache': 'A cache stores frequently-accessed data in fast memory so the app does not have to fetch it from the database every time.',
+  'external': 'An external service is something outside your codebase \u2014 a third-party API, SaaS product, or partner system you depend on but do not control.',
+  'config': 'A configuration file controls how the app behaves without changing code. Environment variables, feature flags, and settings live here.',
+  'test': 'A test automatically verifies that code works correctly. If someone breaks something, the test should catch it before it reaches users.',
+  'middleware': 'Middleware sits between incoming requests and your handlers. It can check authentication, log requests, or transform data before your code sees it.',
+  'webhook': 'A webhook is a URL that another service calls when something happens. Instead of polling, your app gets notified automatically.',
+  'worker': 'A worker is a background process that picks up tasks from a queue and processes them. It handles work too slow for a direct request.',
+  'view': 'A view is a UI component or template that renders what the user sees on screen.',
+  'model': 'A model represents a real-world concept in code \u2014 like a User, Order, or Product. It defines what data the concept has.',
+  'schema': 'A schema defines the expected shape of data. It validates that incoming data matches what the code expects.',
+  'migration': 'A migration is a versioned change to the database structure. Migrations run in order to evolve the database as the app grows.',
+  'file': 'A general source or data file in the project.',
+  'script': 'A standalone script that runs on its own for tasks like database seeding, deployment, or one-off data fixes.',
+  'struct': 'A struct is a lightweight data container grouping related fields. Unlike a class, it typically has no behavior.',
+  'protocol': 'A protocol (or interface/trait) defines a contract. Any type that conforms to it must implement the required methods.',
+  'enum_def': 'An enum is a fixed set of named values. Instead of magic strings or numbers, code uses the enum for type safety.',
+  'util': 'A utility module provides shared helper functions \u2014 small reusable pieces of code that many parts of the app need.',
+  'system': 'The top-level container representing your entire project. Everything else lives inside it.',
+  'submodule': 'A Git submodule or nested dependency \u2014 a separate repository included within this project.',
+};
+
+var detailClickCount = 0;
+try { detailClickCount = parseInt(localStorage.getItem('blueprint-xray-detail-clicks') || '0', 10); } catch(e) {}
 
 /* ----------------------------------------------------------------
    Mutable state
@@ -1126,22 +1386,90 @@ function initOnboarding() {
   if (DATA.nodes.length === 0) shouldShow = true;
   if (!shouldShow) return;
 
+  var currentStep = 0;
+  try { currentStep = parseInt(localStorage.getItem('blueprint-xray-onboard-step') || '0', 10); } catch(e) {}
+  if (currentStep >= 3) { dismissOnboarding(); return; }
+
+  var steps = [
+    {
+      title: 'What am I looking at?',
+      hints: [
+        { icon: '&#127968;', text: 'This is a living map of your project\u2019s architecture.' },
+        { icon: '&#128230;', text: 'Each card represents a directory or group of related files.' },
+        { icon: '&#128268;', text: 'Lines between cards show which groups depend on each other.' }
+      ],
+      button: 'Next \u2192'
+    },
+    {
+      title: 'How do I explore?',
+      hints: [
+        { icon: '&#128070;', text: 'Double-click any card to see what\u2019s inside.' },
+        { icon: '&#128269;', text: 'Click any component to see its details on the right.' },
+        { icon: '&#11013;', text: 'Use the breadcrumb bar or press Escape to go back.' }
+      ],
+      button: 'Next \u2192'
+    },
+    {
+      title: 'What should I look for?',
+      hints: [
+        { icon: '&#9888;', text: 'Check the Health tab for broken links or missing connections.' },
+        { icon: '&#128161;', text: 'Look for isolated components \u2014 they might be dead code.' },
+        { icon: '&#128200;', text: 'Thick lines between groups mean heavy coupling worth investigating.' }
+      ],
+      button: 'Got it'
+    }
+  ];
+
   var overlay = document.createElement('div');
   overlay.id = 'onboarding-overlay';
-  overlay.innerHTML =
-    '<div class="onboarding-card">' +
-      '<h3>Welcome to Blueprint X-Ray</h3>' +
-      '<div class="onboarding-hints">' +
-        '<div class="onboarding-hint"><span class="hint-icon">&#127968;</span><span>You\'re seeing the big picture \u2014 your project\'s main sections</span></div>' +
-        '<div class="onboarding-hint"><span class="hint-icon">&#128070;</span><span>Double-click any section to see what\'s inside</span></div>' +
-        '<div class="onboarding-hint"><span class="hint-icon">&#128269;</span><span>Double-click a component to see its connections</span></div>' +
-        '<div class="onboarding-hint"><span class="hint-icon">&#11013;</span><span>Use the breadcrumb bar or press Escape to go back</span></div>' +
-      '</div>' +
-      '<button class="onboarding-dismiss">Got it</button>' +
-    '</div>';
   document.body.appendChild(overlay);
 
-  overlay.querySelector('.onboarding-dismiss').addEventListener('click', dismissOnboarding);
+  function renderStep(idx) {
+    var step = steps[idx];
+    var html = '<div class="onboarding-card">';
+    html += '<div class="onboarding-progress">';
+    for (var i = 0; i < steps.length; i++) {
+      html += '<span class="onboarding-dot' + (i === idx ? ' active' : '') + (i < idx ? ' done' : '') + '"></span>';
+    }
+    html += '</div>';
+    html += '<h3>' + step.title + '</h3>';
+    html += '<div class="onboarding-hints">';
+    step.hints.forEach(function(hint) {
+      html += '<div class="onboarding-hint"><span class="hint-icon">' + hint.icon + '</span><span>' + hint.text + '</span></div>';
+    });
+    html += '</div>';
+    if (idx > 0) {
+      html += '<div style="display:flex;gap:8px">';
+      html += '<button class="onboarding-back" id="onboarding-back">\u2190 Back</button>';
+      html += '<button class="onboarding-dismiss" id="onboarding-next">' + step.button + '</button>';
+      html += '</div>';
+    } else {
+      html += '<button class="onboarding-dismiss" id="onboarding-next">' + step.button + '</button>';
+    }
+    html += '</div>';
+    overlay.innerHTML = html;
+
+    overlay.querySelector('#onboarding-next').addEventListener('click', function() {
+      if (idx < steps.length - 1) {
+        currentStep = idx + 1;
+        try { localStorage.setItem('blueprint-xray-onboard-step', String(currentStep)); } catch(e) {}
+        renderStep(currentStep);
+      } else {
+        dismissOnboarding();
+      }
+    });
+    var backBtn = overlay.querySelector('#onboarding-back');
+    if (backBtn) {
+      backBtn.addEventListener('click', function() {
+        currentStep = idx - 1;
+        try { localStorage.setItem('blueprint-xray-onboard-step', String(currentStep)); } catch(e) {}
+        renderStep(currentStep);
+      });
+    }
+  }
+
+  renderStep(currentStep);
+
   overlay.addEventListener('click', function(e) { if (e.target === overlay) dismissOnboarding(); });
   document.addEventListener('keydown', function onEsc(e) {
     if (e.key === 'Escape') { dismissOnboarding(); document.removeEventListener('keydown', onEsc); }
@@ -1151,7 +1479,10 @@ function initOnboarding() {
 function dismissOnboarding() {
   var overlay = document.getElementById('onboarding-overlay');
   if (overlay) overlay.remove();
-  try { localStorage.setItem('blueprint-xray-onboarded', '1'); } catch(e) {}
+  try {
+    localStorage.setItem('blueprint-xray-onboarded', '1');
+    localStorage.setItem('blueprint-xray-onboard-step', '3');
+  } catch(e) {}
 }
 
 /* ================================================================
@@ -1286,6 +1617,35 @@ function showContextMenu(event, d) {
 function hideContextMenu() {
   document.getElementById('context-menu').style.display = 'none';
   contextMenuTarget = null;
+}
+
+function showEdgeTooltip(event, d) {
+  var tip = document.getElementById('edge-tooltip');
+  var srcNode = overviewNodes.find(function(n) { return n.id === (d.source.id || d.source); });
+  var tgtNode = overviewNodes.find(function(n) { return n.id === (d.target.id || d.target); });
+  var srcName = srcNode ? srcNode.name : '?';
+  var tgtName = tgtNode ? tgtNode.name : '?';
+
+  var html = '<strong>' + esc(srcName) + ' \u2194 ' + esc(tgtName) + '</strong><br>';
+  html += '<span style="opacity:0.8">' + d.count + ' connection' + (d.count !== 1 ? 's' : '') + ' between these groups</span>';
+  if (d.rels && d.rels.length > 0) {
+    html += '<div style="margin-top:6px;border-top:1px solid rgba(255,255,255,0.15);padding-top:6px">';
+    d.rels.forEach(function(rel) {
+      var desc = RELATIONSHIP_HELP[rel] || '';
+      html += '<div><strong>' + esc(rel.replace(/_/g, ' ')) + '</strong>';
+      if (desc) html += ' \u2014 ' + esc(desc);
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+  tip.innerHTML = html;
+  tip.style.left = Math.min(event.pageX + 12, window.innerWidth - 340) + 'px';
+  tip.style.top = (event.pageY - 10) + 'px';
+  tip.style.display = 'block';
+}
+
+function hideEdgeTooltip() {
+  document.getElementById('edge-tooltip').style.display = 'none';
 }
 
 function focusOnNode(nodeId, hops) {
@@ -1467,6 +1827,24 @@ function renderNodeDetail(nd) {
     h += '<div class="field-value">' + esc(nd.description) + '</div>';
   }
 
+  /* "What does this mean?" explainer */
+  var explainText = NODE_EXPLAIN[nd.type] || '';
+  var connSignificance = '';
+  if (conns.length === 0) connSignificance = 'This component is isolated \u2014 nothing connects to it. It may be new, unused, or missing connections.';
+  else if (conns.length > 10) connSignificance = 'Highly connected (' + conns.length + ' connections). Changes here could have wide impact across your app.';
+  else if (conns.filter(function(e) { return e.target_id === nd.id; }).length > 5) connSignificance = 'Many components depend on this. Treat it as critical infrastructure \u2014 be careful when changing it.';
+
+  if (explainText || connSignificance) {
+    var shouldExpand = detailClickCount < 3;
+    h += '<div class="explain-section">';
+    h += '<button class="explain-toggle" id="explain-toggle">';
+    h += (shouldExpand ? '\u25BC' : '\u25B6') + ' What does this mean?</button>';
+    h += '<div class="explain-body" id="explain-body" style="display:' + (shouldExpand ? 'block' : 'none') + '">';
+    if (explainText) h += '<div class="explain-text">' + esc(explainText) + '</div>';
+    if (connSignificance) h += '<div class="explain-text" style="font-weight:600">' + esc(connSignificance) + '</div>';
+    h += '</div></div>';
+  }
+
   h += '<div class="field-label">Status</div>';
   h += '<div class="field-value" style="text-transform:capitalize">'
      + esc(nd.status.replace('_', ' ')) + '</div>';
@@ -1586,6 +1964,8 @@ function renderNodeDetail(nd) {
       if (isUnhealthy) item += '<span class="conn-warn">\u26A0</span>';
       if (e.status === 'planned') item += '<span style="font-size:10px;color:var(--text-muted)">(planned)</span>';
       if (e.label) item += '<div class="conn-edge-label">\u201C' + esc(e.label) + '\u201D</div>';
+      var ctxExpl = getContextualEdgeExplanation(e.relationship, nd.name, otherName, isSrc);
+      if (ctxExpl) item += '<div class="conn-context">' + esc(ctxExpl) + '</div>';
       if (RELATIONSHIP_HELP[e.relationship]) item += '<div class="conn-explanation">' + RELATIONSHIP_HELP[e.relationship] + '</div>';
       item += '</div>';
       return item;
@@ -1620,6 +2000,19 @@ function renderNodeDetail(nd) {
   if (backBtn) backBtn.addEventListener('click', () => navigateBack());
   const drillBtn = document.getElementById('drill-in-btn');
   if (drillBtn) drillBtn.addEventListener('click', () => navigateToLevel(2, nd.id));
+
+  /* Explanation toggle */
+  var explainBtn = document.getElementById('explain-toggle');
+  if (explainBtn) {
+    explainBtn.addEventListener('click', function() {
+      var body = document.getElementById('explain-body');
+      var isOpen = body.style.display !== 'none';
+      body.style.display = isOpen ? 'none' : 'block';
+      explainBtn.textContent = (isOpen ? '\u25B6' : '\u25BC') + ' What does this mean?';
+    });
+  }
+  detailClickCount++;
+  try { localStorage.setItem('blueprint-xray-detail-clicks', String(detailClickCount)); } catch(e) {}
 
   document.querySelectorAll('.tab-btn').forEach(b  => b.classList.remove('active'));
   document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
@@ -1658,6 +2051,8 @@ function renderHealth() {
     h += '<div class="issue-msg">'  + esc(issue.message) + '</div>';
     if (issue.suggestion)
       h += '<div class="issue-suggestion">' + esc(issue.suggestion) + '</div>';
+    if (ISSUE_TYPE_HELP[issue.type])
+      h += '<div class="issue-explanation">' + esc(ISSUE_TYPE_HELP[issue.type]) + '</div>';
     h += '</div>';
   });
 
@@ -1668,34 +2063,237 @@ function renderHealth() {
    QUESTIONS TAB
    ================================================================ */
 function renderQuestions() {
-  const qs = DATA.questions || [];
-  let h = '';
+  var qs = DATA.questions || [];
 
   if (qs.length === 0) {
-    h += '<div class="detail-empty" style="height:auto;padding:32px 0">' +
-         '<div style="font-size:24px;opacity:0.3">&#10003;</div>' +
-         '<div>No questions detected</div></div>';
+    document.getElementById('tab-questions').innerHTML =
+      '<div class="detail-empty" style="height:auto;padding:32px 0">' +
+      '<div style="font-size:24px;opacity:0.3">&#10003;</div>' +
+      '<div>No questions detected \u2014 your architecture looks clean!</div></div>';
+    return;
   }
 
-  qs.forEach(q => {
-    h += '<div class="question-card" data-highlight=\'' +
-         JSON.stringify(q.highlight_nodes || []) + '\'>';
-    h += '<div class="q-severity ' + (q.severity || 'info') + '">' +
-         (q.severity || 'info').toUpperCase() + '</div>';
-    h += '<div class="q-text">'    + esc(q.question) + '</div>';
-    h += '<div class="q-context">' + esc(q.context)  + '</div>';
-    h += '<span class="q-category">' + esc(q.category) + '</span>';
+  var h = '<div class="questions-header">';
+  h += '<div class="questions-count">' + qs.length + ' questions to investigate</div>';
+  h += '</div>';
+
+  /* Group by category */
+  var grouped = {};
+  qs.forEach(function(q) {
+    var cat = q.category || 'general';
+    if (!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push(q);
+  });
+
+  var catIcons = {
+    security: '\uD83D\uDD12',
+    completeness: '\uD83D\uDCCB',
+    data_flow: '\uD83D\uDD04',
+    reliability: '\u26A1',
+    testing: '\uD83E\uDDEA',
+    general: '\uD83D\uDCA1'
+  };
+  var catLabels = {
+    security: 'Security',
+    completeness: 'Missing Pieces',
+    data_flow: 'Data Flow',
+    reliability: 'Reliability',
+    testing: 'Testing',
+    general: 'General'
+  };
+
+  Object.entries(grouped).forEach(function(entry) {
+    var cat = entry[0], questions = entry[1];
+    var icon = catIcons[cat] || '\uD83D\uDCA1';
+    var label = catLabels[cat] || cat;
+
+    h += '<div class="question-category">';
+    h += '<div class="question-category-header">' + icon + ' ' + label + ' (' + questions.length + ')</div>';
+
+    questions.forEach(function(q) {
+      h += '<div class="question-card" data-highlight=\'' + JSON.stringify(q.highlight_nodes || []) + '\'>';
+      h += '<div class="question-text">' + esc(q.question) + '</div>';
+      if (q.context) {
+        h += '<div class="question-context">' + esc(q.context) + '</div>';
+      }
+      if (q.fix_prompt) {
+        h += '<div class="question-fix">\uD83D\uDCA1 Fix: ' + esc(q.fix_prompt) + '</div>';
+      }
+      if (q.learn_more) {
+        h += '<div class="question-learn">\uD83D\uDCD6 ' + esc(q.learn_more) + '</div>';
+      }
+      h += '</div>';
+    });
+
     h += '</div>';
   });
 
   document.getElementById('tab-questions').innerHTML = h;
 
-  document.querySelectorAll('.question-card').forEach(card => {
-    card.addEventListener('click', () => {
-      const ids = JSON.parse(card.dataset.highlight || '[]');
+  document.querySelectorAll('.question-card').forEach(function(card) {
+    card.addEventListener('click', function() {
+      var ids = JSON.parse(card.dataset.highlight || '[]');
       if (ids.length > 0) highlightNodes(ids);
     });
   });
+}
+
+/* ================================================================
+   LAYERS TAB
+   ================================================================ */
+function renderLayers() {
+  var layers = [
+    { icon: '\uD83D\uDDA5\uFE0F', name: 'User Interface', description: 'What the user sees and interacts with',
+      color: '#3b82f6', groups: [], nodeTypes: ['view', 'route'],
+      dirPatterns: ['view', 'views', 'ui', 'toolbar', 'inspector', 'screen', 'pages', 'layout', 'home', 'components', 'shared'] },
+    { icon: '\uD83E\uDDE9', name: 'App Structure', description: 'App entry point, navigation, and top-level wiring',
+      color: '#8b5cf6', groups: [], nodeTypes: ['system'],
+      dirPatterns: ['app', 'navigation'] },
+    { icon: '\u2699\uFE0F', name: 'Core Logic', description: 'Data models, state management, and business rules',
+      color: '#10b981', groups: [], nodeTypes: ['function'],
+      dirPatterns: ['model', 'models', 'sketch', 'solver', 'constraint', 'operation', 'lib', 'utils', 'hooks', 'content'] },
+    { icon: '\uD83D\uDCD0', name: 'Geometry & Math', description: 'Mathematical foundations \u2014 points, vectors, transforms',
+      color: '#f59e0b', groups: [], nodeTypes: ['struct'],
+      dirPatterns: ['geometry', 'math', 'primitives', 'vector'] },
+    { icon: '\uD83D\uDD37', name: 'Topology & Mesh', description: 'How shapes are built \u2014 faces, edges, vertices, bodies',
+      color: '#ec4899', groups: [], nodeTypes: [],
+      dirPatterns: ['topology', 'mesh', 'brep', 'viewport'] },
+    { icon: '\uD83D\uDCE4', name: 'Import & Export', description: 'Getting data in and out \u2014 file formats, exporters',
+      color: '#ef4444', groups: [], nodeTypes: [],
+      dirPatterns: ['export', 'import', 'io'] },
+    { icon: '\uD83D\uDD0C', name: 'API & Services', description: 'How your app talks to servers and external services',
+      color: '#06b6d4', groups: [], nodeTypes: ['middleware', 'service'],
+      dirPatterns: ['supabase', 'api', 'server'] },
+    { icon: '\uD83D\uDDC4\uFE0F', name: 'Data Layer', description: 'Where data is stored permanently',
+      color: '#64748b', groups: [], nodeTypes: ['table', 'database', 'column'],
+      dirPatterns: ['db', 'data', 'migration'] }
+  ];
+
+  var ovCards = overviewNodes.filter(function(n) { return n._isOverviewCard; });
+
+  ovCards.forEach(function(group) {
+    var nameLower = (group.name || '').toLowerCase();
+    var dominantTypes = Object.entries(group._typeBreakdown || {}).sort(function(a, b) { return b[1] - a[1]; });
+    var topType = dominantTypes.length > 0 ? dominantTypes[0][0] : '';
+    var assigned = false;
+
+    /* Try node type match first */
+    for (var i = 0; i < layers.length; i++) {
+      if (layers[i].nodeTypes.indexOf(topType) !== -1) {
+        layers[i].groups.push({ name: group.name, childCount: group._childCount, id: group.id });
+        assigned = true; break;
+      }
+    }
+
+    /* Then directory name pattern match */
+    if (!assigned) {
+      for (var j = 0; j < layers.length; j++) {
+        for (var k = 0; k < layers[j].dirPatterns.length; k++) {
+          if (nameLower.indexOf(layers[j].dirPatterns[k]) !== -1) {
+            layers[j].groups.push({ name: group.name, childCount: group._childCount, id: group.id });
+            assigned = true; break;
+          }
+        }
+        if (assigned) break;
+      }
+    }
+
+    /* Default to Business Logic */
+    if (!assigned) {
+      layers[2].groups.push({ name: group.name, childCount: group._childCount, id: group.id });
+    }
+  });
+
+  layers.forEach(function(layer) {
+    layer.totalNodes = layer.groups.reduce(function(sum, g) { return sum + g.childCount; }, 0);
+    layer.groupNames = layer.groups.map(function(g) { return g; });
+  });
+
+  var h = '<div class="layers-container">';
+  h += '<div class="layers-title">How Your App Is Organized</div>';
+  h += '<div class="layers-subtitle">Data flows from top to bottom</div>';
+
+  var rendered = 0;
+  layers.forEach(function(layer, i) {
+    if (layer.totalNodes === 0 && layer.groups.length === 0) return;
+    if (rendered > 0) {
+      h += '<div class="layer-arrow">\u25BC</div>';
+    }
+    rendered++;
+
+    h += '<div class="layer-card" style="border-left-color:' + layer.color + '">';
+    h += '<div class="layer-header">';
+    h += '<span class="layer-icon">' + layer.icon + '</span>';
+    h += '<span class="layer-name">' + layer.name + '</span>';
+    h += '<span class="layer-count">' + layer.totalNodes + ' components</span>';
+    h += '</div>';
+    h += '<div class="layer-description">' + layer.description + '</div>';
+
+    if (layer.groupNames.length > 0) {
+      h += '<div class="layer-groups">';
+      layer.groupNames.forEach(function(g) {
+        h += '<span class="layer-group-pill" data-group-id="' + g.id + '">' + esc(g.name) + '</span>';
+      });
+      h += '</div>';
+    }
+    h += '</div>';
+  });
+
+  /* Data flow summary */
+  h += '<div class="layers-flow-summary">';
+  h += '<div class="flow-title">Key Data Flows</div>';
+  var flows = computeTopFlows();
+  flows.forEach(function(flow) {
+    h += '<div class="flow-item">';
+    h += '<span class="flow-path">' + flow.path.join(' \u2192 ') + '</span>';
+    h += '<span class="flow-desc">' + flow.description + '</span>';
+    h += '</div>';
+  });
+  h += '</div>';
+  h += '</div>';
+
+  document.getElementById('tab-layers').innerHTML = h;
+
+  /* Click handlers for group pills */
+  document.querySelectorAll('.layer-group-pill[data-group-id]').forEach(function(pill) {
+    pill.addEventListener('click', function() {
+      navigateToGroup(pill.dataset.groupId);
+    });
+  });
+}
+
+function computeTopFlows() {
+  var flows = [];
+  var outDegree = {};
+  DATA.edges.forEach(function(e) {
+    var sid = e.source_id || e.source;
+    outDegree[sid] = (outDegree[sid] || 0) + 1;
+  });
+
+  var topNodes = Object.entries(outDegree)
+    .sort(function(a, b) { return b[1] - a[1]; })
+    .slice(0, 3)
+    .map(function(entry) {
+      var node = DATA.nodes.find(function(n) { return n.id === entry[0]; });
+      return node ? { name: node.name, count: entry[1] } : null;
+    })
+    .filter(Boolean);
+
+  topNodes.forEach(function(n) {
+    flows.push({
+      path: [n.name, '...', 'data layer'],
+      description: n.count + ' outgoing connections \u2014 a key hub in your app'
+    });
+  });
+
+  return flows;
+}
+
+function navigateToGroup(groupId) {
+  var targetGroup = overviewNodes.find(function(n) { return n.id === groupId && n._isOverviewCard; });
+  if (targetGroup && targetGroup._childCount > 0) {
+    navigateToLevel(2, targetGroup.id);
+  }
 }
 
 /* ================================================================
@@ -1883,6 +2481,7 @@ function buildGraph() {
 
   /* Compute overview data and start at Level 1 */
   computeOverviewData();
+  renderLayers();
   currentLevel = 0;
   navigateToLevel(1);
   initOnboarding();
@@ -1894,7 +2493,7 @@ function buildGraph() {
 function drawEdges(edgeG, edges) {
   var groups = edgeG.selectAll('.edge-group')
     .data(edges, function(d) { return d.id; }).join('g')
-    .attr('class', function(d) { return 'edge-group ' + edgeDashClass(d.relationship) + (d.status === 'planned' ? ' planned' : ''); });
+    .attr('class', function(d) { return 'edge-group ' + edgeDashClass(d.relationship) + (d.status === 'planned' ? ' planned' : '') + (d._isGhostEdge ? ' ghost-edge' : ''); });
 
   groups.append('path')
     .attr('class', function(d) { return 'edge-line' + (d.status === 'planned' ? ' planned' : ''); })
@@ -2064,7 +2663,7 @@ function drawNodes(nodeG, nodes, opts) {
   /* Apply status opacity */
   groups
     .style('opacity', function(d) {
-      if (d._isGhost) return 0.4;
+      if (d._isGhost) return 0.6;
       if (d.status === 'planned') return 0.45;
       if (d.status === 'deprecated') return 0.5;
       return null;
@@ -2140,16 +2739,20 @@ function computeOverviewData() {
         if (child.type !== 'column') typeBreakdown[child.type] = (typeBreakdown[child.type] || 0) + 1;
       });
 
-      overviewNodes.push({
+      var descNodeObjs = [n].concat(descIds.map(function(id) { return gNodeMap[id]; }).filter(Boolean));
+      var ovNode = {
         ...n, _isOverviewCard: true,
         _childCount: descIds.length,
         _internalEdgeCount: internalCount,
         _externalEdgeCount: externalCount,
         _typeBreakdown: typeBreakdown,
-        w: 220, h: 100,
+        _descendants: descNodeObjs,
+        w: 220, h: 120,
         x: gW * 0.1 + Math.random() * gW * 0.8,
         y: gH * 0.2 + Math.random() * gH * 0.6
-      });
+      };
+      ovNode._groupColor = getGroupColor(ovNode);
+      overviewNodes.push(ovNode);
       groupNodeIds.add(n.id);
     }
   });
@@ -2271,10 +2874,32 @@ function renderOverview() {
   var edgeG = mainG.append('g').attr('class', 'edges-layer');
   var nodeG = mainG.append('g').attr('class', 'nodes-layer');
 
+  /* Level 1 subtitle */
+  mainG.append('text')
+    .attr('class', 'level-subtitle')
+    .attr('x', 20).attr('y', 20)
+    .attr('font-size', '13px')
+    .attr('fill', 'var(--text-muted)')
+    .text('Each card is a section of your code. Double-click to explore inside.');
+
   /* Draw aggregated edges */
   var aggEdgeGroups = edgeG.selectAll('.agg-edge')
     .data(overviewEdges, function(d) { return d.id; }).join('g')
-    .attr('class', 'agg-edge');
+    .attr('class', 'agg-edge')
+    .style('cursor', 'help')
+    .on('mouseenter', function(event, d) { showEdgeTooltip(event, d); })
+    .on('mousemove', function(event) {
+      var tip = document.getElementById('edge-tooltip');
+      tip.style.left = Math.min(event.pageX + 12, window.innerWidth - 340) + 'px';
+      tip.style.top = (event.pageY - 10) + 'px';
+    })
+    .on('mouseleave', function() { hideEdgeTooltip(); });
+
+  /* Invisible wider hit zone for easier hover */
+  aggEdgeGroups.append('line')
+    .attr('stroke', 'transparent')
+    .attr('stroke-width', 14)
+    .style('pointer-events', 'stroke');
 
   aggEdgeGroups.append('line')
     .attr('class', 'edge-line')
@@ -2306,28 +2931,23 @@ function renderOverview() {
       .on('drag', dragged)
       .on('end', dragEnded));
 
-  /* Card background */
+  /* Card background — colored by dominant child type */
   cardGroups.append('rect')
     .attr('class', 'card-bg node-rect')
     .attr('width', function(d) { return d.w; }).attr('height', function(d) { return d.h; })
     .attr('rx', 12).attr('ry', 12)
-    .attr('fill', 'var(--node-bg)')
-    .attr('stroke', function(d) { return TYPE_COLORS[d.type] || '#6b7280'; })
-    .attr('stroke-width', 2);
-
-  /* Tint overlay */
-  cardGroups.append('rect')
-    .attr('width', function(d) { return d.w; }).attr('height', function(d) { return d.h; })
-    .attr('rx', 12).attr('ry', 12)
-    .attr('fill', function(d) { return TYPE_COLORS[d.type] || '#6b7280'; })
-    .attr('fill-opacity', 0.06)
-    .attr('pointer-events', 'none');
+    .attr('fill', function(d) { return d._groupColor || '#3b82f6'; })
+    .attr('fill-opacity', 'var(--card-tint-opacity)')
+    .attr('stroke', function(d) { return d._groupColor || '#3b82f6'; })
+    .attr('stroke-opacity', 'var(--card-border-opacity)')
+    .attr('stroke-width', 1.5);
 
   /* Left color bar */
   cardGroups.append('rect')
-    .attr('width', 5).attr('height', function(d) { return d.h; })
+    .attr('width', 4).attr('height', function(d) { return d.h; })
     .attr('rx', 2)
-    .attr('fill', function(d) { return TYPE_COLORS[d.type] || '#6b7280'; });
+    .attr('fill', function(d) { return d._groupColor || '#3b82f6'; })
+    .attr('fill-opacity', 0.6);
 
   /* Group name */
   cardGroups.append('text')
@@ -2343,22 +2963,38 @@ function renderOverview() {
     .attr('fill', 'var(--text-secondary)')
     .text(function(d) { return d._childCount + ' nodes | ' + d._internalEdgeCount + ' internal | ' + d._externalEdgeCount + ' external'; });
 
-  /* Type breakdown bar */
+  /* Group description */
+  cardGroups.append('text')
+    .attr('x', 14).attr('y', 60)
+    .attr('font-size', '10px')
+    .attr('fill', 'var(--card-subtitle)')
+    .attr('font-style', 'italic')
+    .text(function(d) {
+      var desc = getGroupDescription(d.name);
+      return desc ? trunc(desc, 45) : '';
+    });
+
+  /* Type composition bar (category-level colors) */
   cardGroups.each(function(d) {
     var g = d3.select(this);
-    var barY = 56, barH = 8, barW = d.w - 28;
-    var total = Object.values(d._typeBreakdown).reduce(function(a, b) { return a + b; }, 0);
-    if (total === 0) return;
-    var xOff = 14;
+    var barY = d.h - 14, barH = 6, barW = d.w - 16;
+    var catCounts = {};
     Object.entries(d._typeBreakdown).forEach(function(entry) {
-      var type = entry[0], count = entry[1];
+      var cat = getTypeCategory(entry[0]);
+      catCounts[cat] = (catCounts[cat] || 0) + entry[1];
+    });
+    var total = Object.values(catCounts).reduce(function(a, b) { return a + b; }, 0);
+    if (total === 0) return;
+    var xOff = 8;
+    Object.entries(catCounts).forEach(function(entry) {
+      var cat = entry[0], count = entry[1];
       var w = (count / total) * barW;
       g.append('rect')
         .attr('x', xOff).attr('y', barY)
         .attr('width', Math.max(w, 2)).attr('height', barH)
-        .attr('rx', 2)
-        .attr('fill', TYPE_COLORS[type] || '#6b7280')
-        .attr('fill-opacity', 0.6);
+        .attr('rx', 3)
+        .attr('fill', TYPE_CATEGORIES[cat] ? TYPE_CATEGORIES[cat].color : '#6b7280')
+        .attr('fill-opacity', 0.5);
       xOff += w;
     });
   });
@@ -2367,7 +3003,7 @@ function renderOverview() {
   cardGroups.append('text')
     .attr('x', 14).attr('y', 80)
     .attr('font-size', '9px')
-    .attr('fill', 'var(--text-muted)')
+    .attr('fill', 'var(--card-stats)')
     .text(function(d) {
       return Object.entries(d._typeBreakdown)
         .sort(function(a, b) { return b[1] - a[1]; })
@@ -2421,8 +3057,8 @@ function renderOverview() {
         return 'translate(' + (d.x - d.w / 2) + ',' + (d.y - d.h / 2) + ')';
       });
 
-      /* Position aggregated edges */
-      aggEdgeGroups.select('line')
+      /* Position aggregated edges (both hit-zone and visible lines) */
+      aggEdgeGroups.selectAll('line')
         .attr('x1', function(d) { var n = allOvNodes.find(function(n) { return n.id === d.source.id || n.id === d.source; }); return n ? n.x : 0; })
         .attr('y1', function(d) { var n = allOvNodes.find(function(n) { return n.id === d.source.id || n.id === d.source; }); return n ? n.y : 0; })
         .attr('x2', function(d) { var n = allOvNodes.find(function(n) { return n.id === d.target.id || n.id === d.target; }); return n ? n.x : 0; })
@@ -2484,27 +3120,29 @@ function renderGroup(groupId) {
     }
   });
 
-  /* Create ghost nodes */
+  /* Create ghost nodes — positioned in a row at the top boundary */
   activeGhosts = [];
-  ghostNodeIds.forEach(function(gid) {
+  var ghostArr = Array.from(ghostNodeIds);
+  ghostArr.forEach(function(gid, gi) {
     var orig = gNodeMap[gid];
     if (!orig) return;
     var parentGroupName = findParentGroupName(gid);
+    var ghostCount = ghostArr.length;
     activeGhosts.push({
       ...orig,
       _isGhost: true,
-      _ghostLabel: parentGroupName ? '(from ' + parentGroupName + ')' : '',
+      _ghostLabel: parentGroupName ? 'from ' + parentGroupName : '',
       _ghostOrigGroup: parentGroupName,
       w: 100, h: 32,
-      x: gW * 0.1 + Math.random() * gW * 0.8,
-      y: gH * 0.2 + Math.random() * gH * 0.6
+      x: gW * 0.1 + (ghostCount > 1 ? (gi / (ghostCount - 1)) * gW * 0.8 : gW * 0.4),
+      y: 40
     });
   });
 
   /* Combine edges for ghost connections */
   var allLevelEdges = internalEdges.slice();
   crossingEdges.forEach(function(e) {
-    allLevelEdges.push({ ...e, source: e.source_id, target: e.target_id });
+    allLevelEdges.push({ ...e, source: e.source_id, target: e.target_id, _isGhostEdge: true });
   });
 
   /* Recompute pair counts for this level */
@@ -2520,9 +3158,6 @@ function renderGroup(groupId) {
   });
 
   var allLevelNodes = memberNodes.concat(activeGhosts);
-
-  /* Draw layer labels in Level 2 */
-  drawLayerLabels(mainG);
 
   /* Draw edges */
   gEdgeGroups = drawEdges(edgeG, allLevelEdges);
