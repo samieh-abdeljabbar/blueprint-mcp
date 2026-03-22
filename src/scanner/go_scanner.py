@@ -56,6 +56,9 @@ class GoScanner(BaseScanner):
                 await self._scan_file(full, path)
                 self._files_scanned += 1
 
+        # Create directory hierarchy
+        await self._create_directory_parents(path)
+
         return self._build_result("go_scanner", start)
 
     async def _scan_go_mod(self, project_root: str):

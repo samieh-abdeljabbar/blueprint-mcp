@@ -79,6 +79,9 @@ class PythonScanner(BaseScanner):
         # Create deferred edges
         await self._create_deferred_edges()
 
+        # Create directory hierarchy
+        await self._create_directory_parents(path)
+
         return self._build_result("python_scanner", start)
 
     async def _scan_file(self, filepath: str, project_root: str):

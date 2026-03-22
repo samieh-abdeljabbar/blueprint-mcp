@@ -71,6 +71,9 @@ class RustScanner(BaseScanner):
         # Create deferred edges
         await self._create_deferred_edges()
 
+        # Create directory hierarchy
+        await self._create_directory_parents(path)
+
         return self._build_result("rust_scanner", start)
 
     async def _scan_cargo_toml(self, project_root: str):

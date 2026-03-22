@@ -1205,7 +1205,7 @@ async def test_swift_scanner_detects_observable_classes(db: Database):
 
     bp = await db.get_blueprint(type_filter="class_def")
     classes = bp["nodes"]
-    observable = [c for c in classes if c.get("metadata", {}).get("observable")]
+    observable = [c for c in classes if (c.get("metadata") or {}).get("observable")]
     assert len(observable) >= 1
     assert any(c["name"] == "UserViewModel" for c in observable)
 
@@ -1274,6 +1274,100 @@ async def test_swift_scanner_idempotent(db: Database):
     count2 = bp2["summary"]["total_nodes"]
 
     assert count1 == count2
+
+
+async def test_swift_scanner_property_edges(db: Database):
+    """UserViewModel depends_on User via @Published var users: [User]."""
+    info = await scan_project_files(SWIFT_PROJECT, db)
+    scanner = SwiftScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SWIFT_PROJECT)
+
+    bp = await db.get_blueprint()
+    edges = bp["edges"]
+    nodes = {n["id"]: n["name"] for n in bp["nodes"]}
+    depends_edges = [e for e in edges if e["relationship"] == "depends_on"]
+    dep_pairs = [(nodes.get(e["source_id"]), nodes.get(e["target_id"])) for e in depends_edges]
+    assert ("UserViewModel", "User") in dep_pairs
+
+
+async def test_swift_scanner_observed_object_edges(db: Database):
+    """ContentView depends_on UserViewModel via @StateObject."""
+    info = await scan_project_files(SWIFT_PROJECT, db)
+    scanner = SwiftScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SWIFT_PROJECT)
+
+    bp = await db.get_blueprint()
+    edges = bp["edges"]
+    nodes = {n["id"]: n["name"] for n in bp["nodes"]}
+    depends_edges = [e for e in edges if e["relationship"] == "depends_on"]
+    dep_pairs = [(nodes.get(e["source_id"]), nodes.get(e["target_id"])) for e in depends_edges]
+    assert ("ContentView", "UserViewModel") in dep_pairs
+
+
+async def test_swift_scanner_init_call_edges(db: Database):
+    """MyApp uses ContentView via ContentView() initializer call."""
+    info = await scan_project_files(SWIFT_PROJECT, db)
+    scanner = SwiftScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SWIFT_PROJECT)
+
+    bp = await db.get_blueprint()
+    edges = bp["edges"]
+    nodes = {n["id"]: n["name"] for n in bp["nodes"]}
+    uses_edges = [e for e in edges if e["relationship"] == "uses"]
+    uses_pairs = [(nodes.get(e["source_id"]), nodes.get(e["target_id"])) for e in uses_edges]
+    assert ("MyApp", "ContentView") in uses_pairs
+
+
+async def test_swift_scanner_no_framework_edges(db: Database):
+    """Framework types like View, String, UUID should not be created as nodes."""
+    info = await scan_project_files(SWIFT_PROJECT, db)
+    scanner = SwiftScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SWIFT_PROJECT)
+
+    bp = await db.get_blueprint()
+    node_names = {n["name"] for n in bp["nodes"]}
+    # These framework types should never appear as nodes
+    for fw in ("View", "String", "UUID", "Bool", "Scene"):
+        assert fw not in node_names, f"Framework type '{fw}' should not be a node"
+
+
+async def test_swift_scanner_directory_hierarchy(db: Database):
+    """Directory grouping creates module nodes for Models and Geometry (2+ files)."""
+    info = await scan_project_files(SWIFT_PROJECT, db)
+    scanner = SwiftScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SWIFT_PROJECT)
+
+    bp = await db.get_blueprint(type_filter="module")
+    modules = bp["nodes"]
+    dir_modules = [m for m in modules if m.get("metadata", {}).get("directory")]
+    dir_names = {m["name"] for m in dir_modules}
+    assert "Models" in dir_names
+    assert "Geometry" in dir_names
+
+
+async def test_swift_scanner_edge_count_realistic(db: Database):
+    """Expect 5+ edges total from conformance + references."""
+    info = await scan_project_files(SWIFT_PROJECT, db)
+    scanner = SwiftScanner(db, info.root_id, info.gitignore_spec)
+    result = await scanner.scan(SWIFT_PROJECT)
+
+    bp = await db.get_blueprint()
+    edges = bp["edges"]
+    assert len(edges) >= 5, f"Expected 5+ edges, got {len(edges)}"
+
+
+async def test_swift_scanner_geometry_property_edge(db: Database):
+    """GeometryKernel depends_on Solver via var solver: Solver property."""
+    info = await scan_project_files(SWIFT_PROJECT, db)
+    scanner = SwiftScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(SWIFT_PROJECT)
+
+    bp = await db.get_blueprint()
+    edges = bp["edges"]
+    nodes = {n["id"]: n["name"] for n in bp["nodes"]}
+    depends_edges = [e for e in edges if e["relationship"] == "depends_on"]
+    dep_pairs = [(nodes.get(e["source_id"]), nodes.get(e["target_id"])) for e in depends_edges]
+    assert ("GeometryKernel", "Solver") in dep_pairs
 
 
 # =============================================================================

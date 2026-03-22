@@ -16,7 +16,7 @@ from src.models import (
 )
 from src.scanner.base import BaseScanner
 
-# Regex patterns
+# ---- Phase 1: Declaration patterns ----
 STRUCT_PATTERN = re.compile(
     r'^\s*(?:public\s+|private\s+|internal\s+|open\s+)?struct\s+(\w+)(?:\s*:\s*(.+?))?\s*\{',
     re.MULTILINE,
@@ -46,6 +46,27 @@ MAIN_APP = re.compile(
     re.DOTALL,
 )
 
+# ---- Phase 2: Reference patterns ----
+RE_PROPERTY_TYPE = re.compile(
+    r'(?:var|let)\s+\w+\s*:\s*\[?(\w+)\]?',
+)
+RE_OBSERVED_OBJECT = re.compile(
+    r'@(?:ObservedObject|StateObject)\s+(?:var|let)\s+\w+\s*(?::\s*(\w+)|=\s*(\w+)\s*\()',
+)
+RE_ENVIRONMENT_OBJECT = re.compile(
+    r'@EnvironmentObject\s+(?:var|let)\s+\w+\s*:\s*(\w+)',
+)
+RE_BINDING = re.compile(
+    r'@Binding\s+(?:var|let)\s+\w+\s*:\s*(\w+)',
+)
+RE_INIT_CALL = re.compile(
+    r'\b([A-Z]\w+)\s*\(',
+)
+RE_EXTENSION = re.compile(
+    r'^extension\s+(\w+)\s*:\s*([^{]+)\s*\{',
+    re.MULTILINE,
+)
+
 SWIFT_EXTENSIONS = {".swift"}
 
 # Known SwiftUI view protocols
@@ -58,6 +79,18 @@ STDLIB_PROTOCOLS = {
     "Comparable", "Identifiable", "CustomStringConvertible", "Error",
     "CaseIterable", "RawRepresentable", "Sendable",
 }
+# Framework types to ignore for dependency edges (not user-defined)
+FRAMEWORK_TYPES = {
+    "String", "Int", "Double", "Float", "Bool", "Data", "Date", "URL",
+    "UUID", "Array", "Dictionary", "Set", "Optional", "Result",
+    "CGFloat", "CGPoint", "CGSize", "CGRect",
+    "Color", "Font", "Image", "Text", "Button", "NavigationView",
+    "NavigationStack", "NavigationLink", "List", "VStack", "HStack",
+    "ZStack", "ForEach", "Section", "Form", "Group", "GeometryReader",
+    "ScrollView", "TabView", "Sheet", "Alert",
+    "some", "Any", "AnyObject", "Never", "Void",
+    "Scene", "WindowGroup", "Published",
+} | STDLIB_PROTOCOLS | VIEW_PROTOCOLS | OBSERVABLE_PROTOCOLS
 
 
 class SwiftScanner(BaseScanner):
@@ -66,10 +99,13 @@ class SwiftScanner(BaseScanner):
         self._protocol_node_ids: dict[str, str] = {}
         self._class_node_ids: dict[str, str] = {}
         self._deferred_conformance: list[tuple[str, str, str]] = []  # (child_id, parent_name, type)
+        self._deferred_references: list[tuple[str, str, str]] = []  # (source_id, target_id, edge_type)
 
         # Parse Package.swift if present
         await self._scan_package_swift(path)
 
+        # Phase 1: Scan all files for type declarations (nodes)
+        swift_files: list[str] = []
         for dirpath, dirnames, filenames in os.walk(path):
             dirnames[:] = [
                 d for d in dirnames
@@ -83,9 +119,17 @@ class SwiftScanner(BaseScanner):
                     continue
                 await self._scan_file(full, path)
                 self._files_scanned += 1
+                swift_files.append(full)
 
-        # Create deferred conformance/inheritance edges
+        # Phase 2: Scan references (edges from property types, wrappers, init calls)
+        for full in swift_files:
+            await self._scan_references(full, path)
+
+        # Phase 3: Create all deferred edges
         await self._create_deferred_edges()
+
+        # Phase 4: Create directory hierarchy
+        await self._create_directory_parents(path)
 
         return self._build_result("swift_scanner", start)
 
@@ -118,6 +162,7 @@ class SwiftScanner(BaseScanner):
             ))
 
     async def _scan_file(self, filepath: str, project_root: str):
+        """Phase 1: Scan for type declarations and create nodes."""
         rel_path = os.path.relpath(filepath, project_root)
         try:
             with open(filepath) as f:
@@ -156,6 +201,8 @@ class SwiftScanner(BaseScanner):
         # Detect structs
         for match in STRUCT_PATTERN.finditer(source):
             struct_name = match.group(1)
+            if struct_name in self._class_node_ids:  # Already created (e.g., by @main)
+                continue
             conformances_str = match.group(2)
             line = source[:match.start()].count("\n") + 1
 
@@ -242,7 +289,71 @@ class SwiftScanner(BaseScanner):
             ))
             self._class_node_ids[enum_name] = node_id
 
+    async def _scan_references(self, filepath: str, project_root: str):
+        """Phase 2: Scan for type references, property wrappers, and init calls."""
+        rel_path = os.path.relpath(filepath, project_root)
+        try:
+            with open(filepath) as f:
+                source = f.read()
+        except OSError:
+            return
+
+        known_types = set(self._class_node_ids.keys()) | set(self._protocol_node_ids.keys())
+
+        # Find the primary node for this file (first type declared in it)
+        file_source_id = self._find_file_source_id(rel_path)
+        if not file_source_id:
+            return
+
+        seen_targets: set[str] = set()
+
+        def _try_add_edge(type_name: str | None, edge_type: str):
+            if not type_name or type_name in seen_targets:
+                return
+            if type_name not in known_types or type_name in FRAMEWORK_TYPES:
+                return
+            target_id = self._class_node_ids.get(type_name) or self._protocol_node_ids.get(type_name)
+            if target_id and target_id != file_source_id:
+                seen_targets.add(type_name)
+                self._deferred_references.append((file_source_id, target_id, edge_type))
+
+        # @StateObject / @ObservedObject -> depends_on
+        for match in RE_OBSERVED_OBJECT.finditer(source):
+            _try_add_edge(match.group(1) or match.group(2), "depends_on")
+
+        # @EnvironmentObject -> depends_on
+        for match in RE_ENVIRONMENT_OBJECT.finditer(source):
+            _try_add_edge(match.group(1), "depends_on")
+
+        # @Binding -> depends_on
+        for match in RE_BINDING.finditer(source):
+            _try_add_edge(match.group(1), "depends_on")
+
+        # Property type references: var x: SomeType -> depends_on
+        for match in RE_PROPERTY_TYPE.finditer(source):
+            _try_add_edge(match.group(1), "depends_on")
+
+        # Initializer calls: SomeType() -> uses
+        for match in RE_INIT_CALL.finditer(source):
+            _try_add_edge(match.group(1), "uses")
+
+        # Extension conformance: extension X: ProtocolY
+        for match in RE_EXTENSION.finditer(source):
+            type_name = match.group(1)
+            conformances_str = match.group(2)
+            type_id = self._class_node_ids.get(type_name)
+            if type_id and conformances_str:
+                for proto in [c.strip() for c in conformances_str.split(",")]:
+                    if proto and proto not in STDLIB_PROTOCOLS and proto not in VIEW_PROTOCOLS and proto not in FRAMEWORK_TYPES:
+                        self._deferred_conformance.append((type_id, proto, "implements"))
+
+    def _find_file_source_id(self, rel_path: str) -> str | None:
+        """Find the primary node ID for a given source file."""
+        node_ids = self._file_node_ids.get(rel_path, [])
+        return node_ids[0] if node_ids else None
+
     async def _create_deferred_edges(self):
+        # Conformance/inheritance edges
         for child_id, parent_name, edge_type in self._deferred_conformance:
             parent_id = (
                 self._protocol_node_ids.get(parent_name)
@@ -255,6 +366,20 @@ class SwiftScanner(BaseScanner):
                     target_id=parent_id,
                     relationship=rel,
                 ))
+
+        # Reference edges (property types, wrappers, init calls)
+        seen_edges: set[tuple[str, str]] = set()
+        for source_id, target_id, edge_type in self._deferred_references:
+            edge_key = (source_id, target_id)
+            if edge_key in seen_edges:
+                continue
+            seen_edges.add(edge_key)
+            rel = EdgeRelationship.uses if edge_type == "uses" else EdgeRelationship.depends_on
+            await self._track_edge(EdgeCreateInput(
+                source_id=source_id,
+                target_id=target_id,
+                relationship=rel,
+            ))
 
 
 def _parse_conformances(conformances_str: str | None) -> set[str]:
