@@ -91,6 +91,75 @@ class BaseScanner(ABC):
             duration_ms=(time.time() - start_time) * 1000,
         )
 
+    @staticmethod
+    def _extract_doc_comment(source: str, match_start: int, style: str = "js") -> str | None:
+        """Extract doc comment preceding a definition.
+
+        style: "js" for /** ... */, "slash" for /// lines
+        """
+        lines_before = source[:match_start].rstrip().split("\n")
+        comments: list[str] = []
+
+        for line in reversed(lines_before[-8:]):
+            stripped = line.strip()
+            if style == "js":
+                if stripped == "*/":
+                    continue
+                if stripped.startswith("/**"):
+                    text = stripped.removeprefix("/**").removesuffix("*/").strip()
+                    if text:
+                        comments.insert(0, text)
+                    break
+                if stripped.startswith("*"):
+                    text = stripped.lstrip("* ").strip()
+                    if text and not text.startswith("@"):
+                        comments.insert(0, text)
+                    continue
+            elif style == "slash":
+                if stripped.startswith("///"):
+                    comments.insert(0, stripped.lstrip("/ ").strip())
+                    continue
+
+            if not stripped:
+                continue
+            break
+
+        if comments:
+            return " ".join(comments)[:200]
+        return None
+
+    @staticmethod
+    def _infer_description(name: str, node_type: str, metadata: dict | None) -> str | None:
+        """Generate a description from node type and metadata when no doc comment exists."""
+        meta = metadata or {}
+        if meta.get("tauri_command"):
+            return "Tauri IPC command"
+        if meta.get("pattern") == "zustand_store":
+            return "Zustand state store"
+        if meta.get("pattern") == "hook":
+            return "React hook"
+        if meta.get("component"):
+            return "React component"
+        if meta.get("framework") == "swiftui" and meta.get("view"):
+            return "SwiftUI view"
+        if meta.get("observable"):
+            return "Observable object for reactive state"
+        if node_type == "route" and meta.get("method"):
+            return f"{meta['method']} {meta.get('path', '')} endpoint"
+        if node_type == "struct":
+            confs = meta.get("conformances", [])
+            if confs:
+                return f"Struct conforming to {', '.join(confs[:3])}"
+        if node_type == "protocol":
+            return "Protocol definition"
+        if node_type == "enum_def":
+            return "Enum type"
+        if meta.get("spm_target"):
+            return "Swift Package Manager target"
+        if meta.get("entry_point"):
+            return "Application entry point"
+        return None
+
     async def _create_directory_parents(self, project_root: str) -> None:
         """Create parent module nodes for directories containing 2+ source files.
 

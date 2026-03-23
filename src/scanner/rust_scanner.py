@@ -139,11 +139,13 @@ class RustScanner(BaseScanner):
         for match in STRUCT_PATTERN.finditer(source):
             name = match.group(1)
             line = source[:match.start()].count("\n") + 1
+            description = self._extract_doc_comment(source, match.start(), style="slash")
             node_id, _ = await self._track_node(NodeCreateInput(
                 name=name,
                 type=NodeType.struct,
                 status=NodeStatus.built,
                 parent_id=self.root_id,
+                description=description,
                 source_file=rel_path,
                 source_line=line,
             ))
@@ -153,11 +155,15 @@ class RustScanner(BaseScanner):
         for match in ENUM_PATTERN.finditer(source):
             name = match.group(1)
             line = source[:match.start()].count("\n") + 1
+            description = self._extract_doc_comment(source, match.start(), style="slash")
+            if not description:
+                description = self._infer_description(name, "enum_def", None)
             node_id, _ = await self._track_node(NodeCreateInput(
                 name=name,
                 type=NodeType.enum_def,
                 status=NodeStatus.built,
                 parent_id=self.root_id,
+                description=description,
                 source_file=rel_path,
                 source_line=line,
             ))
@@ -167,11 +173,15 @@ class RustScanner(BaseScanner):
         for match in TRAIT_PATTERN.finditer(source):
             name = match.group(1)
             line = source[:match.start()].count("\n") + 1
+            description = self._extract_doc_comment(source, match.start(), style="slash")
+            if not description:
+                description = self._infer_description(name, "protocol", None)
             node_id, _ = await self._track_node(NodeCreateInput(
                 name=name,
                 type=NodeType.protocol,
                 status=NodeStatus.built,
                 parent_id=self.root_id,
+                description=description,
                 source_file=rel_path,
                 source_line=line,
             ))
@@ -205,12 +215,17 @@ class RustScanner(BaseScanner):
         for match in TAURI_COMMAND.finditer(source):
             cmd_name = match.group(1)
             line = source[:match.start()].count("\n") + 1
+            meta = {"tauri_command": True, "ipc": True}
+            description = self._extract_doc_comment(source, match.start(), style="slash")
+            if not description:
+                description = self._infer_description(cmd_name, "route", meta)
             node_id, _ = await self._track_node(NodeCreateInput(
                 name=cmd_name,
                 type=NodeType.route,
+                description=description,
                 status=NodeStatus.built,
                 parent_id=self.root_id,
-                metadata={"tauri_command": True, "ipc": True},
+                metadata=meta,
                 source_file=rel_path,
                 source_line=line,
             ))

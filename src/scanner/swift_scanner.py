@@ -188,7 +188,11 @@ class SwiftScanner(BaseScanner):
         for match in PROTOCOL_PATTERN.finditer(source):
             proto_name = match.group(1)
             line = source[:match.start()].count("\n") + 1
+            description = self._extract_doc_comment(source, match.start(), style="slash")
+            if not description:
+                description = self._infer_description(proto_name, "protocol", None)
             node_id, _ = await self._track_node(NodeCreateInput(
+                description=description,
                 name=proto_name,
                 type=NodeType.protocol,
                 status=NodeStatus.built,
@@ -219,11 +223,16 @@ class SwiftScanner(BaseScanner):
             if conformances:
                 metadata["conformances"] = sorted(conformances)
 
+            description = self._extract_doc_comment(source, match.start(), style="slash")
+            if not description:
+                description = self._infer_description(struct_name, node_type.value, metadata)
+
             node_id, _ = await self._track_node(NodeCreateInput(
                 name=struct_name,
                 type=node_type,
                 status=NodeStatus.built,
                 parent_id=self.root_id,
+                description=description,
                 metadata=metadata or None,
                 source_file=rel_path,
                 source_line=line,
@@ -250,11 +259,16 @@ class SwiftScanner(BaseScanner):
             if conformances:
                 metadata["conformances"] = sorted(conformances)
 
+            description = self._extract_doc_comment(source, match.start(), style="slash")
+            if not description:
+                description = self._infer_description(class_name, "class_def", metadata)
+
             node_id, _ = await self._track_node(NodeCreateInput(
                 name=class_name,
                 type=NodeType.class_def,
                 status=NodeStatus.built,
                 parent_id=self.root_id,
+                description=description,
                 metadata=metadata or None,
                 source_file=rel_path,
                 source_line=line,
@@ -279,11 +293,15 @@ class SwiftScanner(BaseScanner):
         for match in ENUM_PATTERN.finditer(source):
             enum_name = match.group(1)
             line = source[:match.start()].count("\n") + 1
+            description = self._extract_doc_comment(source, match.start(), style="slash")
+            if not description:
+                description = self._infer_description(enum_name, "enum_def", None)
             node_id, _ = await self._track_node(NodeCreateInput(
                 name=enum_name,
                 type=NodeType.enum_def,
                 status=NodeStatus.built,
                 parent_id=self.root_id,
+                description=description,
                 source_file=rel_path,
                 source_line=line,
             ))

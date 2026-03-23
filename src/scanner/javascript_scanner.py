@@ -368,12 +368,16 @@ class JavaScriptScanner(BaseScanner):
                 metadata: dict = {"framework": "react", "component": True}
                 if rendering:
                     metadata["rendering"] = rendering
+                description = self._extract_doc_comment(source, match.start(), style="js")
+                if not description:
+                    description = self._infer_description(comp_name, "module", metadata)
                 node_id, _ = await self._track_node(NodeCreateInput(
                     name=comp_name,
                     type=NodeType.module,
                     status=NodeStatus.built,
                     parent_id=self.root_id,
                     metadata=metadata,
+                    description=description,
                     source_file=rel_path,
                     source_line=line,
                 ))
@@ -492,12 +496,17 @@ class JavaScriptScanner(BaseScanner):
                 continue
             seen_names.add(store_name)
             line = source[:match.start()].count("\n") + 1
+            meta = {"pattern": "zustand_store", "state_management": True}
+            description = self._extract_doc_comment(source, match.start(), style="js")
+            if not description:
+                description = self._infer_description(store_name, "module", meta)
             node_id, _ = await self._track_node(NodeCreateInput(
                 name=store_name,
                 type=NodeType.module,
                 status=NodeStatus.built,
                 parent_id=self.root_id,
-                metadata={"pattern": "zustand_store", "state_management": True},
+                metadata=meta,
+                description=description,
                 source_file=rel_path,
                 source_line=line,
             ))
@@ -516,12 +525,16 @@ class JavaScriptScanner(BaseScanner):
                 metadata: dict = {"framework": "react", "pattern": "hook"}
                 if rendering:
                     metadata["rendering"] = rendering
+                description = self._extract_doc_comment(source, match.start(), style="js")
+                if not description:
+                    description = self._infer_description(hook_name, "function", metadata)
                 node_id, _ = await self._track_node(NodeCreateInput(
                     name=hook_name,
                     type=NodeType.function,
                     status=NodeStatus.built,
                     parent_id=self.root_id,
                     metadata=metadata,
+                    description=description,
                     source_file=rel_path,
                     source_line=line,
                 ))
