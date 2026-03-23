@@ -485,7 +485,7 @@ async def test_js_scanner_detects_nextjs_config(db: Database):
 
 
 async def test_js_scanner_nextjs_import_edges(db: Database):
-    """Detects depends_on edges from import statements."""
+    """Import statements create edges (depends_on or uses based on target type)."""
     info = await scan_project_files(NEXTJS_PROJECT, db)
     scanner = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
     result = await scanner.scan(NEXTJS_PROJECT)
@@ -494,17 +494,18 @@ async def test_js_scanner_nextjs_import_edges(db: Database):
 
     bp = await db.get_blueprint()
     edges = bp["edges"]
-    depends_on = [e for e in edges if e["relationship"] == "depends_on"]
+    import_rels = {"depends_on", "uses"}
+    import_edges = [e for e in edges if e["relationship"] in import_rels]
     nodes = {n["id"]: n["name"] for n in bp["nodes"]}
 
-    dep_pairs = set()
-    for e in depends_on:
+    edge_pairs = set()
+    for e in import_edges:
         src = nodes.get(e["source_id"], "")
         tgt = nodes.get(e["target_id"], "")
-        dep_pairs.add((src, tgt))
+        edge_pairs.add((src, tgt))
 
-    # Header imports Link
-    assert ("Header", "Link") in dep_pairs
+    # Header imports Link (uses — component import)
+    assert ("Header", "Link") in edge_pairs
 
 
 async def test_js_scanner_nextjs_layout_contains_page(db: Database):
@@ -570,26 +571,27 @@ async def test_js_scanner_detects_class_inheritance(db: Database):
 
 
 async def test_js_scanner_import_chain(db: Database):
-    """App -> Header -> useAuth import chain creates depends_on edges."""
+    """App -> Header -> hooks import chain creates edges."""
     info = await scan_project_files(REACT_PROJECT, db)
     scanner = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
     await scanner.scan(REACT_PROJECT)
 
     bp = await db.get_blueprint()
     edges = bp["edges"]
-    depends_on = [e for e in edges if e["relationship"] == "depends_on"]
+    import_rels = {"depends_on", "uses"}
+    import_edges = [e for e in edges if e["relationship"] in import_rels]
     nodes = {n["id"]: n["name"] for n in bp["nodes"]}
 
-    dep_pairs = set()
-    for e in depends_on:
+    edge_pairs = set()
+    for e in import_edges:
         src = nodes.get(e["source_id"], "")
         tgt = nodes.get(e["target_id"], "")
-        dep_pairs.add((src, tgt))
+        edge_pairs.add((src, tgt))
 
-    # App imports Header
-    assert ("App", "Header") in dep_pairs
+    # App imports Header (uses — component)
+    assert ("App", "Header") in edge_pairs
     # Header imports hooks (via index.ts barrel)
-    assert ("Header", "hooks") in dep_pairs
+    assert ("Header", "hooks") in edge_pairs
 
 
 async def test_js_scanner_handles_empty_file(db: Database):
@@ -678,16 +680,17 @@ async def test_js_scanner_resolves_path_alias(db: Database):
 
     bp = await db.get_blueprint()
     edges = bp["edges"]
-    depends_on = [e for e in edges if e["relationship"] == "depends_on"]
+    import_rels = {"depends_on", "uses"}
+    import_edges = [e for e in edges if e["relationship"] in import_rels]
     nodes = {n["id"]: n["name"] for n in bp["nodes"]}
 
-    dep_pairs = set()
-    for e in depends_on:
+    edge_pairs = set()
+    for e in import_edges:
         src = nodes.get(e["source_id"], "")
         tgt = nodes.get(e["target_id"], "")
-        dep_pairs.add((src, tgt))
+        edge_pairs.add((src, tgt))
 
-    assert ("DashboardDetail", "DashboardCard") in dep_pairs
+    assert ("DashboardDetail", "DashboardCard") in edge_pairs
 
 
 async def test_js_scanner_resolves_at_slash_alias(db: Database):
@@ -727,16 +730,17 @@ async def test_js_scanner_reexport_creates_edge(db: Database):
 
     bp = await db.get_blueprint()
     edges = bp["edges"]
-    depends_on = [e for e in edges if e["relationship"] == "depends_on"]
+    import_rels = {"depends_on", "uses"}
+    import_edges = [e for e in edges if e["relationship"] in import_rels]
     nodes = {n["id"]: n["name"] for n in bp["nodes"]}
 
-    dep_pairs = set()
-    for e in depends_on:
+    edge_pairs = set()
+    for e in import_edges:
         src = nodes.get(e["source_id"], "")
         tgt = nodes.get(e["target_id"], "")
-        dep_pairs.add((src, tgt))
+        edge_pairs.add((src, tgt))
 
-    assert ("hooks", "useAuth") in dep_pairs
+    assert ("hooks", "useAuth") in edge_pairs
 
 
 async def test_js_scanner_detects_custom_hooks(db: Database):
@@ -916,29 +920,29 @@ async def test_js_scanner_detects_zustand_store(db: Database):
 
 
 async def test_js_scanner_zustand_store_edge(db: Database):
-    """Component using useAuthStore() creates depends_on edge to the store."""
+    """Component importing useAuthStore creates uses edge to the store."""
     info = await scan_project_files(REACT_PROJECT, db)
     scanner = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
     await scanner.scan(REACT_PROJECT)
 
     bp = await db.get_blueprint()
     nodes = {n["id"]: n["name"] for n in bp["nodes"]}
-    depends_edges = [e for e in bp["edges"] if e["relationship"] == "depends_on"]
-    dep_pairs = [(nodes.get(e["source_id"]), nodes.get(e["target_id"])) for e in depends_edges]
-    assert ("Header", "useAuthStore") in dep_pairs
+    uses_edges = [e for e in bp["edges"] if e["relationship"] == "uses"]
+    uses_pairs = [(nodes.get(e["source_id"]), nodes.get(e["target_id"])) for e in uses_edges]
+    assert ("Header", "useAuthStore") in uses_pairs
 
 
 async def test_js_scanner_zustand_multiple_stores(db: Database):
-    """Component using multiple stores gets edges to each."""
+    """Component using multiple stores gets uses edges to each."""
     info = await scan_project_files(REACT_PROJECT, db)
     scanner = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
     await scanner.scan(REACT_PROJECT)
 
     bp = await db.get_blueprint()
     nodes = {n["id"]: n["name"] for n in bp["nodes"]}
-    depends_edges = [e for e in bp["edges"] if e["relationship"] == "depends_on"]
-    dep_pairs = [(nodes.get(e["source_id"]), nodes.get(e["target_id"])) for e in depends_edges]
-    assert ("Header", "useThemeStore") in dep_pairs
+    uses_edges = [e for e in bp["edges"] if e["relationship"] == "uses"]
+    uses_pairs = [(nodes.get(e["source_id"]), nodes.get(e["target_id"])) for e in uses_edges]
+    assert ("Header", "useThemeStore") in uses_pairs
 
 
 async def test_js_scanner_zustand_deferred_edges_collected(db: Database):

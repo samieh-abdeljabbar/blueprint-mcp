@@ -81,6 +81,8 @@ class JavaScriptScanner(BaseScanner):
         # Zustand store tracking
         self._store_node_ids: dict[str, str] = {}
         self._deferred_store_edges: list[tuple[str, str]] = []
+        # Role tracking for edge classification: rel_path -> role
+        self._node_role: dict[str, str] = {}  # "component" | "hook" | "store" | "route"
         # Path alias resolution
         self._path_aliases = parse_path_aliases(path)
 
@@ -234,6 +236,7 @@ class JavaScriptScanner(BaseScanner):
                     source_file=rel_path,
                 ))
                 self._module_node_ids[rel_path] = node_id
+                self._node_role[rel_path] = "component"
 
         # Detect API calls (fetch/axios to /api/...)
         await self._detect_api_calls(source, rel_path)
@@ -375,6 +378,7 @@ class JavaScriptScanner(BaseScanner):
                     source_line=line,
                 ))
                 self._module_node_ids[rel_path] = node_id
+                self._node_role[rel_path] = "component"
 
     async def _detect_classes(self, source: str, rel_path: str):
         """Detect class definitions and inheritance."""
@@ -499,6 +503,7 @@ class JavaScriptScanner(BaseScanner):
             ))
             self._module_node_ids[rel_path] = node_id
             self._store_node_ids[store_name] = node_id
+            self._node_role[rel_path] = "store"
 
         # Custom hooks (useX)
         for pattern in (CUSTOM_HOOK, CUSTOM_HOOK_ARROW):
@@ -521,6 +526,8 @@ class JavaScriptScanner(BaseScanner):
                     source_line=line,
                 ))
                 self._module_node_ids[rel_path] = node_id
+                if rel_path not in self._node_role:
+                    self._node_role[rel_path] = "hook"
 
         # createContext
         for match in CREATE_CONTEXT.finditer(source):
@@ -686,9 +693,16 @@ class JavaScriptScanner(BaseScanner):
                 if node_id != parent_node_id:
                     await self.db.update_node_parent(node_id, parent_node_id)
 
+    def _classify_import_edge(self, target_path: str) -> EdgeRelationship:
+        """Classify an import edge based on target's role (component, hook, store)."""
+        role = self._node_role.get(target_path)
+        if role in ("component", "hook", "store"):
+            return EdgeRelationship.uses
+        return EdgeRelationship.depends_on
+
     async def _create_deferred_edges(self):
         """Create all deferred edges after scanning is complete."""
-        # Import edges
+        # Import edges — classified by target role
         seen_edges: set[tuple[str, str]] = set()
         for src_path, tgt_path in self._deferred_import_edges:
             src_id = self._module_node_ids.get(src_path)
@@ -697,10 +711,11 @@ class JavaScriptScanner(BaseScanner):
                 edge_key = (src_id, tgt_id)
                 if edge_key not in seen_edges:
                     seen_edges.add(edge_key)
+                    rel = self._classify_import_edge(tgt_path)
                     await self._track_edge(EdgeCreateInput(
                         source_id=src_id,
                         target_id=tgt_id,
-                        relationship=EdgeRelationship.depends_on,
+                        relationship=rel,
                     ))
 
         # Inheritance edges
