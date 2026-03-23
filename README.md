@@ -6,7 +6,7 @@ Blueprint MCP is a [Model Context Protocol](https://modelcontextprotocol.io/) se
 
 Scan existing codebases to auto-detect architecture, visualize your system with an interactive X-Ray viewer, find architectural issues, trace data flows, simulate what-if scenarios, and export to Mermaid, Graphviz, JSON, CSV, or Markdown.
 
-**38 MCP tools | 334 tests | 6 templates | 9 language scanners | 10 architectural checks | Interactive X-Ray visualization**
+**39 MCP tools | 347 tests | 6 templates | 9 language scanners | 10 architectural checks | Interactive X-Ray visualization**
 
 ---
 
@@ -16,7 +16,7 @@ Scan existing codebases to auto-detect architecture, visualize your system with 
 - [Global Setup (Recommended)](#global-setup-recommended)
 - [Quick Start](#quick-start)
 - [X-Ray Visualization](#x-ray-visualization)
-- [All 38 MCP Tools](#all-38-mcp-tools)
+- [All 39 MCP Tools](#all-38-mcp-tools)
 - [Scanner](#scanner)
 - [Analyzer](#analyzer)
 - [Templates](#templates)
@@ -218,7 +218,7 @@ The `render_blueprint` tool generates a self-contained HTML file with an interac
 
 ---
 
-## All 38 MCP Tools
+## All 39 MCP Tools
 
 ### Node Management (4 tools)
 
@@ -326,6 +326,12 @@ The `render_blueprint` tool generates a self-contained HTML file with an interac
 | `link_projects` | Create a cross-project link between nodes in different blueprints |
 | `get_project_map` | Show all linked projects and their connections |
 
+### Project Configuration (1 tool)
+
+| Tool | Description |
+|------|-------------|
+| `set_project_type` | Set project type (web, desktop, tauri, electron, mobile, api, monorepo) to calibrate health checks |
+
 ### Annotations (3 tools)
 
 | Tool | Description |
@@ -345,7 +351,7 @@ All scanners automatically create **directory hierarchy nodes** — grouping fil
 | Language | Method | Detects |
 |----------|--------|---------|
 | **Python** | AST parsing | FastAPI/Flask/Django apps, routes, SQLAlchemy/Django models, Pydantic models, Celery tasks, imports, classes, protocols, directory hierarchy |
-| **JavaScript/TypeScript** | Regex | Express/Next.js/React routes & components, Prisma/Drizzle/TypeORM models, Vue SFCs, class inheritance, import edges, path alias resolution, directory hierarchy |
+| **JavaScript/TypeScript** | Regex | Express/Next.js/React routes & components, Prisma/Drizzle/TypeORM models, Vue SFCs, class inheritance, import edges with role classification (uses vs depends_on), Zustand store detection, Tauri invoke() IPC edges, path alias resolution, directory hierarchy |
 | **Swift** | Regex | SwiftUI views, structs, ObservableObject classes, protocols, enums, @main app entry, SPM targets, property type dependencies, @StateObject/@ObservedObject/@EnvironmentObject edges, init call edges, extension conformance, directory hierarchy |
 | **SQL/Database** | Regex | CREATE TABLE with columns, foreign keys, views with source edges, indexes, triggers, functions, ALTER TABLE FK |
 | **Prisma** | Regex | Datasource, models, fields, columns, `@relation` edges |
@@ -354,7 +360,7 @@ All scanners automatically create **directory hierarchy nodes** — grouping fil
 | **Knex/Sequelize** | Regex | createTable tables, .references().inTable() FK edges |
 | **Connection Strings** | Regex | DATABASE_URL, REDIS_URL (credentials never stored) |
 | **Docker** | YAML/text | Dockerfile images & ports, docker-compose services, depends_on edges |
-| **Rust** | Regex | Structs, traits, enums, impl blocks, Actix/Axum routes, Cargo.toml deps, directory hierarchy |
+| **Rust** | Regex | Structs, traits, enums, impl blocks, Actix/Axum routes, `#[tauri::command]` IPC handlers, Cargo.toml deps, directory hierarchy |
 | **Go** | Regex | Structs, interfaces, HTTP handlers, packages, go.mod deps, directory hierarchy |
 | **Config/IaC** | YAML/HCL/text | Kubernetes manifests, Terraform resources, GraphQL schemas, GitHub Actions, .env files |
 
@@ -378,6 +384,8 @@ The scanner respects `.gitignore` and always skips `.git/`, `node_modules/`, `__
 | Stale nodes | Warning | Nodes referencing missing source files |
 | Unused modules | Info | Modules with no connections (skips directory group nodes) |
 | Missing descriptions | Info | Nodes without descriptions |
+
+Health reports include a **confidence level** (low/medium/high) based on how many nodes the scanner could trace connections for, and **positive findings** highlighting what's working well. Auth checks are automatically skipped for desktop/Tauri/Electron projects.
 
 In the X-Ray viewer, clicking any health issue highlights the affected nodes on the graph and zooms to them.
 
@@ -487,22 +495,22 @@ source .venv/bin/activate
 pytest tests/ -v
 ```
 
-**334 tests** across 19 test files:
+**347 tests** across 19 test files:
 
 | File | Tests | Coverage |
 |------|-------|----------|
-| `test_scanner.py` | 140 | Python/JS/Docker/Swift/Rust/Go/Config/SQL scanners, edges, hierarchy, idempotency |
+| `test_scanner.py` | 150 | Python/JS/Docker/Swift/Rust/Go/Config/SQL scanners, Tauri IPC, Zustand, edges, hierarchy |
 | `test_server.py` | 51 | Node/edge CRUD, blueprint queries, changelog, extended types |
 | `test_templates.py` | 23 | Template loading, validation, application, multi-template |
-| `test_analyzer.py` | 20 | All 10 checks with positive and negative cases |
+| `test_analyzer.py` | 22 | All 10 checks, SPOF filtering, circular dep severity |
 | `test_xray.py` | 17 | HTML visualization, themes, D3 embedding, legend, onboarding, drill-down |
-| `test_questions.py` | 11 | Security, completeness, data flow, reliability gap detection |
+| `test_questions.py` | 12 | Security, completeness, data flow, desktop-aware filtering |
 | `test_tracer.py` | 11 | Entry points, linear flow, branches, cycles, gaps |
 | `test_models_descriptions.py` | 9 | Node type, status, edge relationship descriptions |
 | `test_impact.py` | 7 | Upstream/downstream/both cascade analysis |
 | `test_snapshots.py` | 6 | Save, restore, compare, confirm safety |
 | `test_export.py` | 6 | Mermaid, Markdown, JSON, CSV, DOT formats |
-| `test_health.py` | 5 | Node scoring, project grades, edge cases |
+| `test_health.py` | 5 | Node scoring, project grades, confidence levels |
 | `test_whatif.py` | 5 | Remove, break, disconnect, overload scenarios |
 | `test_query.py` | 5 | Natural language parsing, keyword matching |
 | `test_review.py` | 4 | Review prompt generation |

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-Blueprint MCP is a Model Context Protocol server that maintains a living architectural map of any software project. It tracks components (services, databases, APIs, routes, functions, etc.), their connections, and build status via a local SQLite database. Currently exposes **38 MCP tools** with **309 tests**.
+Blueprint MCP is a Model Context Protocol server that maintains a living architectural map of any software project. It tracks components (services, databases, APIs, routes, functions, etc.), their connections, and build status via a local SQLite database. Currently exposes **39 MCP tools** with **347 tests**.
 
 ## Key Commands
 
