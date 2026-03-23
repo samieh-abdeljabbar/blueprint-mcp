@@ -585,12 +585,14 @@ class JavaScriptScanner(BaseScanner):
             self._module_node_ids[rel_path] = node_id
 
     async def _detect_store_usage(self, source: str, rel_path: str):
-        """Detect Zustand useXStore() calls and defer depends_on edges."""
+        """Detect Zustand useXStore() calls and defer depends_on edges.
+
+        Collects all usage unconditionally — filtering against known stores
+        happens in _create_deferred_edges after all files are scanned.
+        """
         for match in ZUSTAND_USE_STORE.finditer(source):
             store_name = match.group(1)
-            # Only create edges to stores we've actually seen defined
-            if store_name in self._store_node_ids:
-                self._deferred_store_edges.append((rel_path, store_name))
+            self._deferred_store_edges.append((rel_path, store_name))
 
     async def _detect_api_calls(self, source: str, rel_path: str):
         """Detect fetch/axios calls to /api/... paths and Tauri invoke() calls."""

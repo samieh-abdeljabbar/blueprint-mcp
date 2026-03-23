@@ -941,6 +941,18 @@ async def test_js_scanner_zustand_multiple_stores(db: Database):
     assert ("Header", "useThemeStore") in dep_pairs
 
 
+async def test_js_scanner_zustand_deferred_edges_collected(db: Database):
+    """Store usage is collected unconditionally regardless of scan order."""
+    info = await scan_project_files(REACT_PROJECT, db)
+    scanner = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(REACT_PROJECT)
+
+    # _deferred_store_edges should contain entries for Header.tsx's useAuthStore/useThemeStore
+    store_names_deferred = {name for _, name in scanner._deferred_store_edges}
+    assert "useAuthStore" in store_names_deferred
+    assert "useThemeStore" in store_names_deferred
+
+
 # =============================================================================
 # Python Scanner — New Tests (Stage 2)
 # =============================================================================

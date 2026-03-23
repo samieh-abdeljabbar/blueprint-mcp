@@ -177,6 +177,20 @@ async def test_highlight_nodes_real_ids(db: Database):
             assert nid in all_ids, f"highlight_nodes ID '{nid}' not found in DB"
 
 
+async def test_desktop_skips_auth_questions(db: Database):
+    """Desktop/Tauri projects skip auth-related questions."""
+    await db.set_project_meta("project_type", "tauri")
+    await db.create_node(
+        NodeCreateInput(name="GET /users", type=NodeType.route)
+    )
+    result = await get_project_questions(db)
+    auth_qs = [
+        q for q in result["questions"]
+        if q["category"] == "security" and "auth" in q["question"].lower()
+    ]
+    assert len(auth_qs) == 0
+
+
 async def test_empty_blueprint(db: Database):
     """Empty DB → no questions, total=0."""
     result = await get_project_questions(db)
