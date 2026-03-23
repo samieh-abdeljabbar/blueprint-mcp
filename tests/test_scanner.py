@@ -1643,6 +1643,19 @@ async def test_config_scanner_detects_tauri_plugins(db: Database):
 
 
 # =============================================================================
+async def test_tauri_scan_project_end_to_end(db: Database):
+    """scan_project() on Tauri fixture produces calls edges from JS to Rust commands."""
+    from src.scanner import scan_project
+    result = await scan_project(TAURI_PROJECT, db)
+    bp = await db.get_blueprint()
+    nodes = {n["id"]: n["name"] for n in bp["nodes"]}
+    calls_edges = [e for e in bp["edges"] if e["relationship"] == "calls"]
+    call_targets = {nodes.get(e["target_id"]) for e in calls_edges}
+    # At least one Tauri command should be connected via calls edge
+    assert len(calls_edges) > 0, f"Expected calls edges, got 0. Edges: {bp['edges']}"
+    assert "get_notes" in call_targets or "save_note" in call_targets
+
+
 # Go Scanner Tests (Stage 5)
 # =============================================================================
 

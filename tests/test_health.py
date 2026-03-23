@@ -191,3 +191,30 @@ async def test_empty_project_returns_zero(db: Database):
     assert result["node_scores"] == {"healthy": 0, "needs_attention": 0, "critical": 0}
     assert result["top_issues"] == []
     assert result["recommendations"] == []
+    assert result["confidence"] == "low"
+    assert result["positive_findings"] == []
+
+
+async def test_health_confidence_and_positives(db: Database):
+    """Well-connected project returns confidence and positive findings."""
+    a = await db.create_node(
+        NodeCreateInput(name="API", type=NodeType.service, status=NodeStatus.built,
+                        description="Main API", source_file=__file__, metadata={"port": 8080})
+    )
+    b = await db.create_node(
+        NodeCreateInput(name="DB", type=NodeType.database, status=NodeStatus.built,
+                        description="Postgres", source_file=__file__)
+    )
+    c = await db.create_node(
+        NodeCreateInput(name="Cache", type=NodeType.cache, status=NodeStatus.built,
+                        description="Redis", source_file=__file__)
+    )
+    await db.create_edge(EdgeCreateInput(source_id=a.id, target_id=b.id, relationship=EdgeRelationship.reads_from))
+    await db.create_edge(EdgeCreateInput(source_id=a.id, target_id=c.id, relationship=EdgeRelationship.reads_from))
+
+    result = await health_report(db)
+    assert result["confidence"] in ("medium", "high")
+    assert result["confidence_note"] is not None
+    assert len(result["positive_findings"]) >= 1
+    # All nodes connected + no broken/deprecated → should have positive findings
+    assert any("healthy status" in p for p in result["positive_findings"])

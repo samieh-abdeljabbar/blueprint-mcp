@@ -196,3 +196,25 @@ async def test_drill_in_button_in_detail(db: Database, tmp_path):
     await render_blueprint(db, output_path=output)
     html = open(output).read()
     assert "drill-in-btn" in html
+
+
+async def test_health_report_embedded_in_data(db: Database, tmp_path):
+    """DATA blob includes health_report with grade and confidence."""
+    await db.create_node(NodeCreateInput(name="Svc", type=NodeType.service))
+    data_str, _ = await _build_data_json(db)
+    data = json.loads(data_str)
+    assert "health_report" in data
+    assert data["health_report"]["grade"] in ("A", "B", "C", "D", "F")
+    assert data["health_report"]["confidence"] in ("low", "medium", "high")
+
+
+async def test_script_tag_in_node_name_escaped(db: Database, tmp_path):
+    """Node name containing </script> is escaped in HTML output."""
+    await db.create_node(NodeCreateInput(
+        name='Evil</script><script>alert(1)</script>',
+        type=NodeType.service,
+    ))
+    output = str(tmp_path / "xss.html")
+    await render_blueprint(db, output_path=output)
+    html = open(output).read()
+    assert "</script><script>alert(1)" not in html

@@ -341,6 +341,37 @@ async def test_spof_skips_main_app_names(db: Database):
     assert "App" not in spof_names
 
 
+async def test_circular_dependency_same_dir_downgraded(db: Database):
+    """Cycle between nodes in the same directory is downgraded to info severity."""
+    a = await db.create_node(
+        NodeCreateInput(name="HalfEdge", type=NodeType.struct, source_file="src/topo/half_edge.py")
+    )
+    b = await db.create_node(
+        NodeCreateInput(name="Vertex", type=NodeType.struct, source_file="src/topo/vertex.py")
+    )
+    await db.create_edge(EdgeCreateInput(
+        source_id=a.id, target_id=b.id, relationship=EdgeRelationship.depends_on
+    ))
+    await db.create_edge(EdgeCreateInput(
+        source_id=b.id, target_id=a.id, relationship=EdgeRelationship.depends_on
+    ))
+    issues = await analyze(db)
+    circular = [i for i in issues if i.type == "circular_dependency"]
+    assert len(circular) >= 1
+    assert circular[0].severity == IssueSeverity.info
+
+
+async def test_desktop_project_skips_auth_check(db: Database):
+    """Desktop/Tauri projects do not get missing_auth issues."""
+    await db.set_project_meta("project_type", "desktop")
+    await db.create_node(
+        NodeCreateInput(name="GET /users", type=NodeType.route)
+    )
+    issues = await analyze(db)
+    auth_issues = [i for i in issues if i.type == "missing_auth"]
+    assert len(auth_issues) == 0
+
+
 async def test_stale_node(db: Database):
     """Node with nonexistent source_file → stale_node."""
     await db.create_node(

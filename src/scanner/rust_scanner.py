@@ -40,8 +40,8 @@ ROUTE_MACRO = re.compile(
     re.IGNORECASE,
 )
 TAURI_COMMAND = re.compile(
-    r'#\[tauri::command\](?:\s*#\[.*?\])*\s*(?:pub(?:\(crate\))?\s+)?(?:async\s+)?fn\s+(\w+)',
-    re.MULTILINE | re.DOTALL,
+    r'#\[tauri::command\](?:\s*#\[[^\]]*\])*\s*(?:pub(?:\(crate\))?\s+)?(?:async\s+)?fn\s+(\w+)',
+    re.MULTILINE,
 )
 
 RUST_EXTENSIONS = {".rs"}

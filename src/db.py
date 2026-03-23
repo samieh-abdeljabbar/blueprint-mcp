@@ -390,6 +390,9 @@ class Database:
             (parent_id, now, node_id),
         )
         await self.db.commit()
+        await self.log_change(
+            "node_parent_updated", "node", node_id, {"parent_id": parent_id}
+        )
 
     # ------------------------------------------------------------------
     # Project Meta (key-value store for project-level configuration)

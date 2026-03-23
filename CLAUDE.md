@@ -36,7 +36,7 @@ blueprint-mcp export --format mermaid      # Export to stdout
 
 The server follows a layered pattern: **MCP tools** (server.py) -> **domain logic** (individual modules) -> **database** (db.py) -> **SQLite**.
 
-- `src/server.py` — FastMCP entry point. All 38 `@mcp.tool` functions live here. Each tool validates input with Pydantic, gets the DB from `ctx.lifespan_context["db"]`, delegates to a domain module, and returns a dict.
+- `src/server.py` — FastMCP entry point. All 39 `@mcp.tool` functions live here. Each tool validates input with Pydantic, gets the DB from `ctx.lifespan_context["db"]`, delegates to a domain module, and returns a dict.
 - `src/db.py` — Async SQLite layer (aiosqlite). Schema has 7 tables: `nodes`, `edges`, `changelog`, `project_meta`, `snapshots`, `annotations`. All CRUD methods, dedup helpers (`find_or_create_node/edge`), and bulk queries.
 - `src/models.py` — Pydantic v2 models. `NodeType` (25 values), `NodeStatus` (5), `EdgeRelationship` (20), `EdgeStatus` (3). Input models, output models, template models, scanner models, analyzer models, flow models.
 

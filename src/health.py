@@ -170,6 +170,7 @@ async def health_report(db: Database, node_id: str | None = None) -> dict:
 
     # Analyzer bonus — graduated by severity
     analyzer_bonus = 0
+    issues: list = []
     try:
         from src.analyzer import analyze as _analyze
 
@@ -265,7 +266,8 @@ async def health_report(db: Database, node_id: str | None = None) -> dict:
         positive_findings.append(
             f"Well-organized file structure: {', '.join(dir_names)}"
         )
-    if broken_count == 0:
+    deprecated_count = sum(1 for n in all_nodes if n.status.value == "deprecated")
+    if broken_count == 0 and deprecated_count == 0:
         positive_findings.append(
             "All components in healthy status — no broken or deprecated nodes"
         )

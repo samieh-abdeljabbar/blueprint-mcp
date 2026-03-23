@@ -133,23 +133,23 @@ def _check_circular_dependencies(
     def dfs(u: str, path: list[str]) -> list[str] | None:
         color[u] = GRAY
         path.append(u)
+        result = None
         for v in adj.get(u, []):
             if v not in color:
                 continue
             if color[v] == GRAY:
-                # Found cycle — extract it
                 if v in path:
                     cycle_start = path.index(v)
-                    return path[cycle_start:]
-                # v is GRAY from a previous DFS tree — skip
+                    result = list(path[cycle_start:])  # copy — path will be mutated
+                    break
                 continue
             if color[v] == WHITE:
                 result = dfs(v, path)
                 if result:
-                    return result
+                    break
         path.pop()
         color[u] = BLACK
-        return None
+        return result
 
     found_cycles: set[frozenset[str]] = set()
     for n in nodes:
@@ -314,10 +314,7 @@ def _check_stale_nodes(nodes: list[Node], db_path: str) -> list[Issue]:
             found = any(
                 os.path.exists(os.path.join(d, n.source_file)) for d in sub_dirs
             )
-            if found:
-                continue
-            full_path = os.path.join(base_dir, n.source_file)
-            if not os.path.exists(full_path):
+            if not found:
                 issues.append(Issue(
                     severity=IssueSeverity.warning,
                     type="stale_node",

@@ -15,7 +15,7 @@ from src.models import (
     NodeType,
     ScanResult,
 )
-from src.scanner.base import BaseScanner
+from src.scanner.base import SKIP_TOP_LEVEL_DIRS, BaseScanner
 from src.scanner.js_frameworks import (
     detect_nextjs_layout,
     detect_nextjs_middleware,
@@ -678,8 +678,8 @@ class JavaScriptScanner(BaseScanner):
 
             dir_name = os.path.basename(rel_dir)
 
-            # Skip 'src' at top level — too broad to be a useful parent
-            if dir_name == "src" and rel_dir == "src":
+            # Skip common top-level directories that are too broad
+            if dir_name in SKIP_TOP_LEVEL_DIRS and os.path.dirname(rel_dir) in ("", "."):
                 continue
 
             # Find this directory's parent directory node (if it exists)
