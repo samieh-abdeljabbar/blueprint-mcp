@@ -115,6 +115,16 @@ TAURI_INVOKE = re.compile(
     r"""invoke\(\s*['"](\w+)['"]"""
 )
 
+# Zustand: export const useAuthStore = create(...) or create<T>(...)
+ZUSTAND_CREATE = re.compile(
+    r"""export\s+(?:const|let)\s+(use\w+Store)\s*=\s*create(?:<[^>]*>)?\s*\("""
+)
+
+# Zustand consumption: useAuthStore() or useAuthStore.getState()
+ZUSTAND_USE_STORE = re.compile(
+    r"""\b(use\w+Store)\s*(?:\(|\.getState)"""
+)
+
 # --- Class patterns ---
 
 # class X extends Y {

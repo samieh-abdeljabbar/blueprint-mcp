@@ -23,6 +23,10 @@ async def get_project_questions(
         edge_ids = {n.id for n in nodes}
         edges = [e for e in edges if e.source_id in edge_ids or e.target_id in edge_ids]
 
+    # Read project type for framework-aware filtering
+    project_type = await db.get_project_meta("project_type") or "web"
+    desktop_types = {"desktop", "tauri", "electron"}
+
     all_questions: list[ProjectQuestion] = []
     checkers = [
         ("security", _check_auth),
@@ -40,6 +44,9 @@ async def get_project_questions(
 
     for cat, checker in checkers:
         if category == "all" or category == cat:
+            # Skip web-specific security questions for desktop apps
+            if cat == "security" and checker == _check_auth and project_type in desktop_types:
+                continue
             all_questions.extend(checker(nodes, edges))
 
     summary = {"critical": 0, "warning": 0, "info": 0}

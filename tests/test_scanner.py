@@ -895,6 +895,52 @@ async def test_js_scanner_enhanced_idempotent(db: Database):
     assert edges1 > 0
 
 
+# --- Zustand store tests ---
+
+
+async def test_js_scanner_detects_zustand_store(db: Database):
+    """Zustand create() stores detected and tracked for edge creation."""
+    info = await scan_project_files(REACT_PROJECT, db)
+    scanner = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(REACT_PROJECT)
+
+    # Verify stores were tracked internally
+    assert "useAuthStore" in scanner._store_node_ids
+    assert "useThemeStore" in scanner._store_node_ids
+
+    # Verify they exist as nodes
+    bp = await db.get_blueprint()
+    node_names = {n["name"] for n in bp["nodes"]}
+    assert "useAuthStore" in node_names
+    assert "useThemeStore" in node_names
+
+
+async def test_js_scanner_zustand_store_edge(db: Database):
+    """Component using useAuthStore() creates depends_on edge to the store."""
+    info = await scan_project_files(REACT_PROJECT, db)
+    scanner = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(REACT_PROJECT)
+
+    bp = await db.get_blueprint()
+    nodes = {n["id"]: n["name"] for n in bp["nodes"]}
+    depends_edges = [e for e in bp["edges"] if e["relationship"] == "depends_on"]
+    dep_pairs = [(nodes.get(e["source_id"]), nodes.get(e["target_id"])) for e in depends_edges]
+    assert ("Header", "useAuthStore") in dep_pairs
+
+
+async def test_js_scanner_zustand_multiple_stores(db: Database):
+    """Component using multiple stores gets edges to each."""
+    info = await scan_project_files(REACT_PROJECT, db)
+    scanner = JavaScriptScanner(db, info.root_id, info.gitignore_spec)
+    await scanner.scan(REACT_PROJECT)
+
+    bp = await db.get_blueprint()
+    nodes = {n["id"]: n["name"] for n in bp["nodes"]}
+    depends_edges = [e for e in bp["edges"] if e["relationship"] == "depends_on"]
+    dep_pairs = [(nodes.get(e["source_id"]), nodes.get(e["target_id"])) for e in depends_edges]
+    assert ("Header", "useThemeStore") in dep_pairs
+
+
 # =============================================================================
 # Python Scanner — New Tests (Stage 2)
 # =============================================================================

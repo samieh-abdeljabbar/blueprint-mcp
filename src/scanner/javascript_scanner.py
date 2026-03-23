@@ -53,6 +53,8 @@ from src.scanner.js_patterns import (
     TAURI_INVOKE,
     TYPEORM_ENTITY,
     USE_DIRECTIVE,
+    ZUSTAND_CREATE,
+    ZUSTAND_USE_STORE,
 )
 
 
@@ -76,6 +78,9 @@ class JavaScriptScanner(BaseScanner):
         self._deferred_api_edges: list[tuple[str, str]] = []
         # Deferred Tauri invoke edges (source_rel_path, command_name)
         self._deferred_invoke_edges: list[tuple[str, str]] = []
+        # Zustand store tracking
+        self._store_node_ids: dict[str, str] = {}
+        self._deferred_store_edges: list[tuple[str, str]] = []
         # Path alias resolution
         self._path_aliases = parse_path_aliases(path)
 
@@ -232,6 +237,9 @@ class JavaScriptScanner(BaseScanner):
 
         # Detect API calls (fetch/axios to /api/...)
         await self._detect_api_calls(source, rel_path)
+
+        # Detect Zustand store usage
+        await self._detect_store_usage(source, rel_path)
 
         # Detect import edges
         await self._detect_imports(source, filepath, rel_path, project_root)
@@ -470,8 +478,27 @@ class JavaScriptScanner(BaseScanner):
     async def _detect_react_patterns(
         self, source: str, rel_path: str, rendering: str | None = None
     ):
-        """Detect React-specific patterns: hooks, context, forwardRef, memo."""
+        """Detect React-specific patterns: Zustand stores, hooks, context, forwardRef, memo."""
         seen_names: set[str] = set()
+
+        # Zustand stores (before hooks — useXStore matches both patterns, Zustand is more specific)
+        for match in ZUSTAND_CREATE.finditer(source):
+            store_name = match.group(1)
+            if store_name in seen_names:
+                continue
+            seen_names.add(store_name)
+            line = source[:match.start()].count("\n") + 1
+            node_id, _ = await self._track_node(NodeCreateInput(
+                name=store_name,
+                type=NodeType.module,
+                status=NodeStatus.built,
+                parent_id=self.root_id,
+                metadata={"pattern": "zustand_store", "state_management": True},
+                source_file=rel_path,
+                source_line=line,
+            ))
+            self._module_node_ids[rel_path] = node_id
+            self._store_node_ids[store_name] = node_id
 
         # Custom hooks (useX)
         for pattern in (CUSTOM_HOOK, CUSTOM_HOOK_ARROW):
@@ -556,6 +583,14 @@ class JavaScriptScanner(BaseScanner):
                 source_line=line,
             ))
             self._module_node_ids[rel_path] = node_id
+
+    async def _detect_store_usage(self, source: str, rel_path: str):
+        """Detect Zustand useXStore() calls and defer depends_on edges."""
+        for match in ZUSTAND_USE_STORE.finditer(source):
+            store_name = match.group(1)
+            # Only create edges to stores we've actually seen defined
+            if store_name in self._store_node_ids:
+                self._deferred_store_edges.append((rel_path, store_name))
 
     async def _detect_api_calls(self, source: str, rel_path: str):
         """Detect fetch/axios calls to /api/... paths and Tauri invoke() calls."""
@@ -699,6 +734,20 @@ class JavaScriptScanner(BaseScanner):
                         source_id=src_id,
                         target_id=tgt_id,
                         relationship=EdgeRelationship.uses,
+                    ))
+
+        # Zustand store usage edges
+        for src_path, store_name in self._deferred_store_edges:
+            src_id = self._module_node_ids.get(src_path)
+            tgt_id = self._store_node_ids.get(store_name)
+            if src_id and tgt_id and src_id != tgt_id:
+                edge_key = (src_id, tgt_id)
+                if edge_key not in seen_edges:
+                    seen_edges.add(edge_key)
+                    await self._track_edge(EdgeCreateInput(
+                        source_id=src_id,
+                        target_id=tgt_id,
+                        relationship=EdgeRelationship.depends_on,
                     ))
 
         # Tauri invoke() edges -> calls to #[tauri::command] Rust functions
