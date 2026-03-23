@@ -391,6 +391,32 @@ class Database:
         )
         await self.db.commit()
 
+    # ------------------------------------------------------------------
+    # Project Meta (key-value store for project-level configuration)
+    # ------------------------------------------------------------------
+
+    async def get_project_meta(self, key: str) -> str | None:
+        """Get a project metadata value by key."""
+        cursor = await self.db.execute(
+            "SELECT value FROM project_meta WHERE key = ?", (key,)
+        )
+        row = await cursor.fetchone()
+        return row[0] if row else None
+
+    async def set_project_meta(self, key: str, value: str) -> None:
+        """Set a project metadata value (insert or replace)."""
+        await self.db.execute(
+            "INSERT OR REPLACE INTO project_meta (key, value) VALUES (?, ?)",
+            (key, value),
+        )
+        await self.db.commit()
+
+    async def get_all_project_meta(self) -> dict[str, str]:
+        """Get all project metadata as a dict."""
+        cursor = await self.db.execute("SELECT key, value FROM project_meta")
+        rows = await cursor.fetchall()
+        return {row[0]: row[1] for row in rows}
+
     async def delete_node(self, node_id: str) -> bool:
         # Fetch for changelog before deleting
         cursor = await self.db.execute(

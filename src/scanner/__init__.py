@@ -69,6 +69,11 @@ async def scan_project(
         result = await scanner.scan(path)
         results.append(result)
 
+    # Step 3b: Auto-detect project type if not already set
+    if await db.get_project_meta("project_type") is None:
+        if os.path.exists(os.path.join(path, "src-tauri", "tauri.conf.json")):
+            await db.set_project_meta("project_type", "desktop")
+
     # Step 4: Log to changelog
     total_nodes = sum(r.nodes_created for r in results)
     total_edges = sum(r.edges_created for r in results)

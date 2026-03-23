@@ -13,13 +13,16 @@ async def analyze(
     db: Database, severity: IssueSeverity | None = None
 ) -> list[Issue]:
     nodes, edges = await _load_graph(db)
+    project_type = await db.get_project_meta("project_type") or "web"
     issues: list[Issue] = []
     issues.extend(_check_orphaned_tables(nodes, edges))
     issues.extend(_check_broken_edges(edges))
     issues.extend(_check_missing_database(nodes, edges))
     issues.extend(_check_circular_dependencies(nodes, edges))
     issues.extend(_check_unimplemented_planned(nodes))
-    issues.extend(_check_missing_auth(nodes, edges))
+    # Skip auth checks for desktop apps — IPC calls don't need HTTP auth
+    if project_type not in ("desktop", "tauri", "electron"):
+        issues.extend(_check_missing_auth(nodes, edges))
     issues.extend(_check_single_point_of_failure(nodes, edges))
     issues.extend(_check_stale_nodes(nodes, db.db_path))
     issues.extend(_check_unused_modules(nodes, edges))

@@ -539,6 +539,22 @@ from src.annotations import (
 
 
 @mcp.tool
+async def set_project_type(
+    project_type: str, ctx: Context = None
+) -> dict:
+    """Set the project type to calibrate health checks (web, desktop, tauri, electron, mobile, api, monorepo)."""
+    valid = {"web", "desktop", "tauri", "electron", "mobile", "api", "monorepo"}
+    if project_type not in valid:
+        return {"error": f"Invalid type. Choose from: {', '.join(sorted(valid))}"}
+    db = _get_db(ctx)
+    await db.set_project_meta("project_type", project_type)
+    return {
+        "project_type": project_type,
+        "message": f"Project type set to '{project_type}'. Health checks calibrated accordingly.",
+    }
+
+
+@mcp.tool
 async def annotate_node(
     node_id: str, key: str, value: str, ctx: Context = None
 ) -> dict:

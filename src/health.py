@@ -124,6 +124,9 @@ async def health_report(db: Database, node_id: str | None = None) -> dict:
             "node_scores": {"healthy": 0, "needs_attention": 0, "critical": 0},
             "top_issues": [],
             "recommendations": [],
+            "confidence": "low",
+            "confidence_note": "No nodes in blueprint.",
+            "positive_findings": [],
         }
 
     # Score every node
@@ -221,6 +224,52 @@ async def health_report(db: Database, node_id: str | None = None) -> dict:
             f"Add descriptions to {no_desc} node(s) to improve documentation"
         )
 
+    # Confidence level — based on how many nodes the scanner could trace
+    connected_count = sum(1 for n in all_nodes if n.id in node_ids_with_edges)
+    connection_rate = connected_count / len(all_nodes) if all_nodes else 0
+    if connection_rate < 0.4:
+        confidence = "low"
+        confidence_note = (
+            f"Scanner traced connections for {connected_count}/{len(all_nodes)} nodes "
+            f"({int(connection_rate * 100)}%). Score may not reflect actual architecture."
+        )
+    elif connection_rate < 0.7:
+        confidence = "medium"
+        confidence_note = (
+            f"{int(connection_rate * 100)}% of nodes have traced connections."
+        )
+    else:
+        confidence = "high"
+        confidence_note = ""
+
+    # Positive findings — what's working well
+    positive_findings: list[str] = []
+    if connection_rate >= 0.7:
+        positive_findings.append(
+            f"Good connectivity: {int(connection_rate * 100)}% of components have traced connections"
+        )
+    analyzer_critical = [i for i in issues if i.severity.value == "critical"] if issues else []
+    if len(analyzer_critical) == 0:
+        positive_findings.append("No critical architectural issues detected")
+    cross_cycles = [
+        i for i in (issues or [])
+        if i.type == "circular_dependency" and i.severity.value == "critical"
+    ]
+    if len(cross_cycles) == 0:
+        positive_findings.append(
+            "Clean dependency structure — no cross-module circular dependencies"
+        )
+    dir_nodes = [n for n in all_nodes if n.metadata and n.metadata.get("directory")]
+    if len(dir_nodes) >= 3:
+        dir_names = sorted(n.name for n in dir_nodes)[:5]
+        positive_findings.append(
+            f"Well-organized file structure: {', '.join(dir_names)}"
+        )
+    if broken_count == 0:
+        positive_findings.append(
+            "All components in healthy status — no broken or deprecated nodes"
+        )
+
     return {
         "overall_score": overall,
         "grade": _grade(overall),
@@ -232,4 +281,7 @@ async def health_report(db: Database, node_id: str | None = None) -> dict:
         },
         "top_issues": top_issues,
         "recommendations": recommendations,
+        "confidence": confidence,
+        "confidence_note": confidence_note,
+        "positive_findings": positive_findings,
     }

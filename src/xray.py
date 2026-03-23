@@ -38,12 +38,14 @@ async def render_blueprint(
 async def _build_data_json(db: Database) -> tuple[str, dict]:
     """Gather all blueprint data and serialize to a JSON string."""
     from src.analyzer import analyze
+    from src.health import health_report as _health_report
     from src.questions import get_project_questions
 
     nodes = await db.get_all_nodes()
     edges = await db.get_all_edges()
     issues = await analyze(db)
     questions_result = await get_project_questions(db)
+    health = await _health_report(db)
 
     # Find project name from first system node, or default
     project_name = "Blueprint"
@@ -65,6 +67,7 @@ async def _build_data_json(db: Database) -> tuple[str, dict]:
         "node_type_descriptions": NODE_TYPE_DESCRIPTIONS,
         "node_status_descriptions": NODE_STATUS_DESCRIPTIONS,
         "edge_relationship_descriptions": EDGE_RELATIONSHIP_DESCRIPTIONS,
+        "health_report": health,
     }
 
     counts = {
@@ -514,6 +517,29 @@ html, body {
   font-size: 11px; color: var(--text-muted);
   margin-top: 6px; padding-top: 6px;
   border-top: 1px solid var(--border-light); line-height: 1.5;
+}
+.health-confidence {
+  padding: 10px 12px; border-radius: 6px; margin-bottom: 12px;
+  font-size: 12px; line-height: 1.5;
+}
+.health-confidence.low {
+  background: var(--issue-warning-bg);
+  border-left: 3px solid var(--issue-warning-border);
+  color: var(--text);
+}
+.health-confidence.medium {
+  background: var(--issue-info-bg);
+  border-left: 3px solid var(--issue-info-border);
+  color: var(--text);
+}
+.health-positives { margin-bottom: 16px; }
+.positives-header {
+  font-size: 12px; font-weight: 700; color: #38a169;
+  margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;
+}
+.positive-item {
+  font-size: 12px; color: var(--text-secondary);
+  padding: 4px 0; line-height: 1.5;
 }
 
 /* ================================================================
@@ -2028,6 +2054,7 @@ function renderNodeDetail(nd) {
    HEALTH TAB
    ================================================================ */
 function renderHealth() {
+  var hr = DATA.health_report || {};
   const critCnt = DATA.issues.filter(i => i.severity === 'critical').length;
   const warnCnt = DATA.issues.filter(i => i.severity === 'warning').length;
   const infoCnt = DATA.issues.filter(i => i.severity === 'info').length;
@@ -2037,6 +2064,23 @@ function renderHealth() {
   h += '<div class="health-stat warning"><div class="stat-number">'  + warnCnt + '</div><div class="stat-label">Warnings</div></div>';
   h += '<div class="health-stat info"><div class="stat-number">'     + infoCnt + '</div><div class="stat-label">Info</div></div>';
   h += '</div>';
+
+  /* Confidence indicator */
+  if (hr.confidence === 'low' && hr.confidence_note) {
+    h += '<div class="health-confidence low">\u26A0\uFE0F ' + esc(hr.confidence_note) + '</div>';
+  } else if (hr.confidence === 'medium' && hr.confidence_note) {
+    h += '<div class="health-confidence medium">' + esc(hr.confidence_note) + '</div>';
+  }
+
+  /* Positive findings — what's working well */
+  if (hr.positive_findings && hr.positive_findings.length > 0) {
+    h += '<div class="health-positives">';
+    h += '<div class="positives-header">What\'s working well</div>';
+    hr.positive_findings.forEach(function(finding) {
+      h += '<div class="positive-item">\u2713 ' + esc(finding) + '</div>';
+    });
+    h += '</div>';
+  }
 
   const sorted = [...DATA.issues].sort((a, b) => {
     const ord = { critical: 0, warning: 1, info: 2 };
