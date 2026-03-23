@@ -6,7 +6,7 @@ Blueprint MCP is a [Model Context Protocol](https://modelcontextprotocol.io/) se
 
 Scan existing codebases to auto-detect architecture, visualize your system with an interactive X-Ray viewer, find architectural issues, trace data flows, simulate what-if scenarios, and export to Mermaid, Graphviz, JSON, CSV, or Markdown.
 
-**39 MCP tools | 347 tests | 6 templates | 9 language scanners | 10 architectural checks | Interactive X-Ray visualization**
+**39 MCP tools | 353 tests | 6 templates | 9 language scanners | 10 architectural checks | Interactive X-Ray visualization**
 
 ---
 
@@ -495,22 +495,22 @@ source .venv/bin/activate
 pytest tests/ -v
 ```
 
-**347 tests** across 19 test files:
+**353 tests** across 19 test files:
 
 | File | Tests | Coverage |
 |------|-------|----------|
-| `test_scanner.py` | 150 | Python/JS/Docker/Swift/Rust/Go/Config/SQL scanners, Tauri IPC, Zustand, edges, hierarchy |
+| `test_scanner.py` | 151 | Python/JS/Docker/Swift/Rust/Go/Config/SQL scanners, Tauri IPC end-to-end, Zustand, edges, hierarchy |
 | `test_server.py` | 51 | Node/edge CRUD, blueprint queries, changelog, extended types |
 | `test_templates.py` | 23 | Template loading, validation, application, multi-template |
-| `test_analyzer.py` | 22 | All 10 checks, SPOF filtering, circular dep severity |
-| `test_xray.py` | 17 | HTML visualization, themes, D3 embedding, legend, onboarding, drill-down |
+| `test_analyzer.py` | 24 | All 10 checks, SPOF filtering, circular dep severity, desktop auth skip |
+| `test_xray.py` | 19 | HTML visualization, themes, D3 embedding, legend, onboarding, drill-down, XSS escape, health data |
 | `test_questions.py` | 12 | Security, completeness, data flow, desktop-aware filtering |
 | `test_tracer.py` | 11 | Entry points, linear flow, branches, cycles, gaps |
 | `test_models_descriptions.py` | 9 | Node type, status, edge relationship descriptions |
 | `test_impact.py` | 7 | Upstream/downstream/both cascade analysis |
 | `test_snapshots.py` | 6 | Save, restore, compare, confirm safety |
 | `test_export.py` | 6 | Mermaid, Markdown, JSON, CSV, DOT formats |
-| `test_health.py` | 5 | Node scoring, project grades, confidence levels |
+| `test_health.py` | 6 | Node scoring, project grades, confidence levels, positive findings |
 | `test_whatif.py` | 5 | Remove, break, disconnect, overload scenarios |
 | `test_query.py` | 5 | Natural language parsing, keyword matching |
 | `test_review.py` | 4 | Review prompt generation |
